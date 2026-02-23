@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+.dark {
+  --background: #0f0f0f;
+  --foreground: #f8fafc;
+}
+
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+html.dark {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d1b2d 25%, #1a1a1a 50%, #2d1b2d 75%, #1a1a1a 100%);
+  min-height: 100vh;
+}
+
+body {
+  background-color: transparent !important;
+  color: var(--foreground) !important;
+  font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark mode specific styles */
+.dark body {
+  background: transparent !important;
+  color: #f8fafc !important;
+}
+
+/* Dark mode backgrounds */
+.dark .bg-white {
+  background: linear-gradient(145deg, #1e1e1e 0%, #2a2a2a 50%, #1e1e1e 100%) !important;
+  box-shadow: 0 8px 32px rgba(139, 69, 19, 0.2) !important;
+  border: 1px solid rgba(220, 20, 60, 0.2) !important;
+}
+
+.dark .bg-gray-50 {
+  background: linear-gradient(145deg, #1a1a1a 0%, #252525 50%, #1a1a1a 100%) !important;
+  box-shadow: inset 0 1px 3px rgba(139, 69, 19, 0.1) !important;
+}
+
+/* Dark mode text colors */
+.dark .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-gray-800 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-gray-700 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-gray-600 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-gray-500 {
+  color: #64748b !important;
+}
+
+/* Dark mode borders */
+.dark .border-gray-200 {
+  border-color: rgba(220, 20, 60, 0.3) !important;
+}
+
+.dark .border-gray-100 {
+  border-color: rgba(220, 20, 60, 0.2) !important;
+}
+
+/* Dark mode hover effects */
+.dark .hover\:bg-gray-100:hover {
+  background-color: rgba(220, 20, 60, 0.1) !important;
+  transform: translateY(-1px);
+}
+
+/* Dark mode activity backgrounds */
+.dark .bg-blue-50 {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%) !important;
+}
+
+.dark .bg-purple-50 {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%) !important;
+}
+
+.dark .bg-green-50 {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(220, 20, 60, 0.05) 100%) !important;
+}
+
+/* Dark mode accent elements */
+.dark .bg-gradient-to-br {
+  background: linear-gradient(135deg, #1e293b 0%, #7c2d12 25%, #dc2626 50%, #7c2d12 75%, #1e293b 100%) !important;
+}
+
+.dark .bg-gradient-to-r {
+  background: linear-gradient(90deg, #1e293b 0%, #dc2626 50%, #7c2d12 100%) !important;
+}
+
+/* Dark mode text accents */
+.dark .text-blue-600 {
+  color: #60a5fa !important;
+}
+
+.dark .text-green-600 {
+  color: #34d399 !important;
+}
+
+.dark .text-red-600 {
+  color: #f87171 !important;
+}
+
+.dark .text-purple-600 {
+  color: #a78bfa !important;
+}
+
+/* Dark mode cards with glass effect */
+.dark .bg-white {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.9) 0%, rgba(139, 69, 19, 0.1) 100%) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(220, 20, 60, 0.3) !important;
+}
+
+/* Dark mode buttons */
+.dark .bg-blue-500 {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 50%, #dc2626 100%) !important;
+  box-shadow: 0 4px 15px rgba(220, 20, 60, 0.4) !important;
+}
+
+.dark .bg-purple-500 {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #dc2626 100%) !important;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3) !important;
+}
+
+.dark .bg-green-500 {
+  background: linear-gradient(135deg, #10b981 0%, #059669 50%, #dc2626 100%) !important;
+  box-shadow: 0 4px 15px rgba(220, 20, 60, 0.3) !important;
+}
+
+.dark .bg-orange-500 {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%) !important;
+  box-shadow: 0 4px 15px rgba(220, 20, 60, 0.4) !important;
+}
+
+/* Dark mode input fields */
+.dark input, .dark textarea, .dark select {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #f8fafc !important;
+}
+
+/* Dark mode focus states */
+.dark input:focus, .dark textarea:focus, .dark select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Force dark mode styles */
+.dark * {
+  border-color: rgba(220, 20, 60, 0.3) !important;
+}
+
+/* Dark mode shadows */
+.dark {
+  box-shadow: 0 8px 32px rgba(220, 20, 60, 0.2) !important;
+}
+
+/* Smooth transitions for theme switching */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark mode progress bars */
+.dark .bg-gradient-to-r {
+  background: linear-gradient(90deg, #1e293b 0%, #dc2626 50%, #7c2d12 100%) !important;
+}
+
+/* Dark mode hover animations */
+.dark *:hover {
+  transform: translateY(-2px) scale(1.02);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode accent shadows */
+.dark {
+  box-shadow: 0 8px 32px rgba(220, 20, 60, 0.2) !important;
+}

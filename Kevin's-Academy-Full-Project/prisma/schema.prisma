@@ -1,0 +1,19 @@
+// 1. Prisma Client-ni generatsiya qilish sozlamasi
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2. MA'LUMOTLAR BAZASI (DATASOURCE) - XATONI TUZATADIGAN QISMI
+datasource db {
+  provider = "mongodb"
+  
+}
+
+// 3. O'QUVCHILAR MODELI
+model Student {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  course    String
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+}

@@ -32,6 +32,14 @@ const nextConfig = {
   webpack: (config, { dev, isServer }) => {
     // Build paytida ogohlantirishlarni kamaytirish
     config.stats = 'errors-only';
+    
+    // Agar webpack build paytida ESLint pluginni ishlatsa, uni o'chirib qo'yish
+    if (config.plugins) {
+      config.plugins = config.plugins.filter(
+        (plugin: any) => plugin.constructor.name !== 'ESLintWebpackPlugin'
+      );
+    }
+    
     return config;
   },
 };

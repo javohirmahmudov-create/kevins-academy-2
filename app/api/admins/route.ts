@@ -6,7 +6,8 @@ export async function GET() {
     const admins = await prisma.admin.findMany({ orderBy: { createdAt: 'desc' } })
     return NextResponse.json(admins)
   } catch (error) {
-    return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
+    console.error('GET /api/admins error:', error)
+    return NextResponse.json({ error: String(error), details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
   }
 }
 
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
     const admin = await prisma.admin.create({ data: body })
     return NextResponse.json(admin)
   } catch (error) {
-    return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
+    console.error('POST /api/admins error:', error)
+    return NextResponse.json({ error: String(error), details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 })
   }
 }
 
@@ -30,7 +32,8 @@ export async function PUT(request: Request) {
     });
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json({ error: 'Update error' }, { status: 500 });
+    console.error('PUT /api/admins error:', error);
+    return NextResponse.json({ error: String(error), details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
 
@@ -42,6 +45,7 @@ export async function DELETE(request: Request) {
     await prisma.admin.delete({ where: { id: parseInt(id) } });
     return NextResponse.json({ message: 'Deleted' });
   } catch (error) {
-    return NextResponse.json({ error: 'Delete error' }, { status: 500 });
+    console.error('DELETE /api/admins error:', error);
+    return NextResponse.json({ error: String(error), details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }

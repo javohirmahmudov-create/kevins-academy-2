@@ -23,13 +23,14 @@ export async function POST(req: Request) {
         phone: body.phone || '',
         username: body.username || `user_${Date.now()}`,
         password: body.password || '123456',
-        status: body.status || 'active'
+        status: body.status || 'active',
+        group: body.group || null
       }
     })
     return NextResponse.json(student)
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Saqlashda xatolik' }, { status: 500 })
+    console.error('POST /api/students error:', error)
+    return NextResponse.json({ error: 'Save error', details: error instanceof Error ? error.message : String(error) }, { status: 500 })
   }
 }
 

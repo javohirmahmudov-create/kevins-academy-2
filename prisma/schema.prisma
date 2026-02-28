@@ -67,6 +67,12 @@ model Material {
   id        Int       @id @default(autoincrement())
   title     String
   content   String?
+  fileUrl   String?
+  fileType  String?
+  group     String?
+  uploadedBy String?
+  uploadedAt DateTime?
+  dueDate   DateTime?   // optional deadline for material
   createdAt DateTime  @default(now())
 }
 

@@ -26,7 +26,7 @@ export interface Group {
 
 export interface Payment { id: string; amount: number; studentId?: string; adminId?: string; createdAt?: string }
 export interface Attendance { id: string; studentId?: string; date?: string; status?: string; adminId?: string }
-export interface Material { id: string; title: string; adminId?: string }
+export interface Material { id: string; title: string; adminId?: string; dueDate?: string }
 export interface Score { id: string; studentId?: string; value?: number; adminId?: string }
 export interface Parent { id: string; adminId?: string }
 

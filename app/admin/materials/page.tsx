@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
-import { getMaterials, saveMaterials, getGroups, Material, Group } from '@/lib/storage';
-import { saveFile, getFile, deleteFile } from '@/lib/fileStorage';
+import { getMaterials, getGroups, Material, Group } from '@/lib/storage';
 
 export default function MaterialsPage() {
   const router = useRouter();
@@ -63,23 +62,24 @@ export default function MaterialsPage() {
     setUploading(true);
 
     try {
-      const materialId = Date.now().toString();
-      
-      // Save file to IndexedDB (supports any size)
-      await saveFile(materialId, selectedFile);
-      
-      // Save material metadata to localStorage
-      await saveMaterials([...(await getMaterials()), {
-        id: `material_${Date.now()}`,
-        title: formData.title,
-        description: formData.title, // Using title as description for now
-        fileUrl: materialId,
-        fileType: formData.type,
-        group: formData.group,
-        uploadedBy: 'admin',
-        uploadedAt: new Date().toISOString()
-      }]);
+      // prepare multipart form data for server upload
+      const form = new FormData();
+      form.append('title', formData.title);
+      form.append('type', formData.type);
+      form.append('group', formData.group);
+      form.append('dueDate', formData.dueDate);
+      if (selectedFile) {
+        form.append('file', selectedFile);
+      }
 
+      const res = await fetch('/api/materials', {
+        method: 'POST',
+        body: form
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const newMaterial = await res.json();
+
+      // refresh list from storage (now backed by server)
       const allMaterials = await getMaterials();
       const sortedMaterials = (allMaterials || []).sort((a: any, b: any) => 
         new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
@@ -168,41 +168,28 @@ export default function MaterialsPage() {
                       )}
                     </div>
                     <div className="flex space-x-2">
-                      <button 
+                      {material.fileUrl && (
+                        <a
+                          href={material.fileUrl}
+                          download={material.title}
+                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span className="text-sm">Download</span>
+                        </a>
+                      )}
+                      <button
                         onClick={async () => {
-                          if (material.fileUrl) {
-                            try {
-                              const file = await getFile(material.fileUrl);
-                              if (file) {
-                                const url = URL.createObjectURL(file);
-                                const link = document.createElement('a');
-                                link.href = url;
-                                link.download = material.title;
-                                link.click();
-                                URL.revokeObjectURL(url);
-                              }
-                            } catch (error) {
-                              alert('Error downloading file');
-                            }
-                          }
-                        }}
-                        className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span className="text-sm">Download</span>
-                      </button>
-                      <button 
-                        onClick={async () => { 
-                          if (material.fileUrl) {
-                            await deleteFile(material.fileUrl);
-                          }
-                          await saveMaterials((await getMaterials()).filter((m: any) => m.id !== material.id));
+                          // call API to delete by id
+                          await fetch(`/api/materials?id=${encodeURIComponent(material.id)}`, {
+                            method: 'DELETE'
+                          });
                           const allMaterials = await getMaterials();
-                          const sortedMaterials = allMaterials.sort((a, b) => 
+                          const sortedMaterials = allMaterials.sort((a, b) =>
                             new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
                           );
                           setMaterials(sortedMaterials);
-                        }} 
+                        }}
                         className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
                       >
                         <Trash2 className="w-4 h-4" />

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, Mail, Phone, Trash2, Edit } from 'lucide-react';
-import { adminStorage, Parent } from '@/lib/storage';
+import { getParents, getStudents, saveParents, Parent } from '@/lib/storage';
 
 export default function ParentsPage() {
   const router = useRouter();
@@ -24,17 +24,21 @@ export default function ParentsPage() {
   });
 
   useEffect(() => {
-    setParents(adminStorage.getParents());
-    setStudents(adminStorage.getStudents());
+    (async () => {
+      const p = await getParents();
+      const s = await getStudents();
+      setParents(p);
+      setStudents(s);
+    })();
   }, []);
 
-  const handleAddParent = () => {
+  const handleAddParent = async () => {
     if (!formData.fullName || !formData.username || !formData.password || !formData.email || !formData.studentId) {
       alert('Please fill in all required fields');
       return;
     }
 
-    const parents = adminStorage.getParents();
+    const parents = await getParents();
     const newParent: Parent = {
       id: `parent_${Date.now()}`,
       fullName: formData.fullName,
@@ -46,8 +50,8 @@ export default function ParentsPage() {
       createdAt: new Date().toISOString()
     };
 
-    adminStorage.saveParents([...parents, newParent]);
-    setParents(adminStorage.getParents());
+    await saveParents([...parents, newParent]);
+    setParents(await getParents());
     setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
     setShowAddModal(false);
   };
@@ -65,7 +69,7 @@ export default function ParentsPage() {
     setShowEditModal(true);
   };
 
-  const handleUpdateParent = () => {
+  const handleUpdateParent = async () => {
     if (!editingParent || !formData.fullName || !formData.username || !formData.email) {
       alert('Please fill in all required fields');
       return;
@@ -83,25 +87,25 @@ export default function ParentsPage() {
       updateData.password = formData.password;
     }
 
-    const parents = adminStorage.getParents();
+    const parents = await getParents();
     const updatedParents = parents.map(parent =>
       parent.id === editingParent.id
         ? { ...parent, ...updateData }
         : parent
     );
-    adminStorage.saveParents(updatedParents);
-    setParents(adminStorage.getParents());
+    await saveParents(updatedParents);
+    setParents(await getParents());
     setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
     setEditingParent(null);
     setShowEditModal(false);
   };
 
-  const handleDeleteParent = (id: string) => {
+  const handleDeleteParent = async (id: string) => {
     if (confirm('Are you sure you want to delete this parent?')) {
-    const parents = adminStorage.getParents();
-    const filteredParents = parents.filter(parent => parent.id !== id);
-    adminStorage.saveParents(filteredParents);
-    setParents(adminStorage.getParents());
+      const parents = await getParents();
+      const filteredParents = parents.filter(parent => parent.id !== id);
+      await saveParents(filteredParents);
+      setParents(await getParents());
     }
   };
 

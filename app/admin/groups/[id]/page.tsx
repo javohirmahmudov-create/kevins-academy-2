@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, User, Mail, Phone, UserMinus } from 'lucide-react';
-import { storage, Student, Group } from '@/lib/storage';
-
+import { AdminStorage as storage, Student, Group } from '@/lib/storage';
 export default function GroupDetailsPage() {
   const router = useRouter();
   const params = useParams();

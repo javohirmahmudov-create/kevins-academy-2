@@ -18,8 +18,11 @@ export async function POST(req: Request) {
     const group = await prisma.group.create({
       data: {
         name: body.name,
-        color: 'from-orange-500 to-red-500', // Rasmdagi kabi standart rang
-        students: 0
+        level: body.level,
+        description: body.description,
+        teacher: body.teacher,
+        schedule: body.schedule,
+        maxStudents: body.maxStudents
       }
     })
     return NextResponse.json(group)
@@ -34,9 +37,20 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 })
     
-    await prisma.group.delete({ where: { id: parseInt(id) } })
+    await prisma.group.delete({ where: { id: String(id) } })
     return NextResponse.json({ message: 'Oʻchirildi' })
   } catch (error) {
     return NextResponse.json({ error: 'Oʻchirishda xatolik' }, { status: 500 })
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, ...data } = body;
+    const updated = await prisma.group.update({ where: { id: String(id) }, data });
+    return NextResponse.json(updated);
+  } catch (error) {
+    return NextResponse.json({ error: 'Update error' }, { status: 500 });
   }
 }

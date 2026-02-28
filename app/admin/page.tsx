@@ -52,12 +52,12 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('themeChanged', handleThemeChange);
   }, []);
 
-  const loadStats = () => {
+  const loadStats = async () => {
     try {
-      const students = getStudents();
-      const groups = getGroups();
-      const payments = getPayments();
-      const attendance = getAttendance();
+      const students = await getStudents();
+      const groups = await getGroups();
+      const payments = await getPayments();
+      const attendance = await getAttendance();
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split('T')[0];

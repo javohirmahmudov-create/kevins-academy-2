@@ -15,24 +15,24 @@ export default function GroupDetailsPage() {
     loadGroupDetails();
   }, [params.id]);
 
-  const loadGroupDetails = () => {
-    const allGroups = getGroups();
+  const loadGroupDetails = async () => {
+    const allGroups = await getGroups();
     const foundGroup = allGroups.find(g => g.id === params.id);
     
     if (foundGroup) {
       setGroup(foundGroup);
       
       // Get students in this group
-      const allStudents = getStudents();
+      const allStudents = await getStudents();
       const groupStudents = allStudents.filter(s => s.group === foundGroup.name);
       setStudents(groupStudents);
     }
   };
 
-  const handleRemoveStudent = (studentId: string) => {
+  const handleRemoveStudent = async (studentId: string) => {
     if (confirm('Remove this student from the group?')) {
-      updateStudent(studentId, { group: 'Not Assigned' });
-      loadGroupDetails();
+      await updateStudent(studentId, { group: 'Not Assigned' });
+      await loadGroupDetails();
     }
   };
 

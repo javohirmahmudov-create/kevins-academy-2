@@ -68,33 +68,39 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (!student?.adminId) return;
 
-    const adminId = student.adminId;
-    const allScores = getDataForAdmin(adminId, 'scores') || [];
-    const studentScores = allScores.filter((s: any) => s.studentName === student.fullName);
-    setScores(studentScores);
+    (async () => {
+      try {
+        const adminId = student.adminId;
+        const allScores = (await getDataForAdmin(adminId, 'scores')) || [];
+        const studentScores = allScores.filter((s: any) => s.studentName === student.fullName);
+        setScores(studentScores);
 
-    if (studentScores.length > 0) {
-      const latest = studentScores[studentScores.length - 1];
-      const skills = Object.keys(latest).filter(key =>
-        !['id', 'studentName', 'createdAt'].includes(key) && typeof latest[key as keyof typeof latest] === 'number'
-      );
-      const total = skills.reduce((sum, key) => sum + (latest[key as keyof typeof latest] || 0), 0);
-      setAverageScore(skills.length > 0 ? Math.round(total / skills.length) : 0);
-      setSkillBreakdown(
-        skills
-          .map((key) => ({
-            key,
-            label: skillLabels[key] || key,
-            score: Number(latest[key as keyof typeof latest] ?? 0),
-          }))
-          .filter((skill) => skill.score > 0)
-      );
-      setLatestScoreDate(latest.createdAt || null);
-    } else {
-      setAverageScore(0);
-      setSkillBreakdown([]);
-      setLatestScoreDate(null);
-    }
+        if (studentScores.length > 0) {
+          const latest = studentScores[studentScores.length - 1];
+          const skills = Object.keys(latest).filter(key =>
+            !['id', 'studentName', 'createdAt'].includes(key) && typeof latest[key as keyof typeof latest] === 'number'
+          );
+          const total = skills.reduce((sum, key) => sum + (latest[key as keyof typeof latest] || 0), 0);
+          setAverageScore(skills.length > 0 ? Math.round(total / skills.length) : 0);
+          setSkillBreakdown(
+            skills
+              .map((key) => ({
+                key,
+                label: skillLabels[key] || key,
+                score: Number(latest[key as keyof typeof latest] ?? 0),
+              }))
+              .filter((skill) => skill.score > 0)
+          );
+          setLatestScoreDate(latest.createdAt || null);
+        } else {
+          setAverageScore(0);
+          setSkillBreakdown([]);
+          setLatestScoreDate(null);
+        }
+      } catch (error) {
+        console.error('Error loading scores:', error);
+      }
+    })();
   }, [student]);
 
   const handleLogout = () => {

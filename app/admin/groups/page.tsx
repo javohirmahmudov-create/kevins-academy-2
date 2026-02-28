@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, BookOpen, Edit, Trash2 } from 'lucide-react';
-import { getGroups, getStudents, saveGroups, Group } from '@/lib/storage';
+import { getGroups, getStudents, addGroup, updateGroup, deleteGroup, Group } from '@/lib/storage';
 
 export default function GroupsPage() {
   const router = useRouter();
@@ -27,40 +27,37 @@ export default function GroupsPage() {
     loadGroups();
   }, []);
 
-  const loadGroups = () => {
-    const allGroups = getGroups();
-    const students = getStudents();
+  const loadGroups = async () => {
+    const allGroups = await getGroups();
+    const students = await getStudents();
     
     // Count students for each group
-    const groupsWithCount = allGroups.map(group => ({
+    const groupsWithCount = allGroups.map((group: any) => ({
       ...group,
-      studentCount: students.filter(s => s.group === group.name).length
+      studentCount: students.filter((s: any) => s.group === group.name).length
     }));
     
     setGroups(groupsWithCount);
   };
 
-  const handleAddGroup = () => {
+  const handleAddGroup = async () => {
     if (!formData.name) {
       alert('Please enter group name');
       return;
     }
 
-    const groups = getGroups();
-    const newGroup = {
-      id: `group_${Date.now()}`,
+    const groupData = {
       name: formData.name,
       level: formData.level,
       description: formData.description,
       teacher: 'Unassigned',
       schedule: 'TBD',
-      maxStudents: 20,
-      createdAt: new Date().toISOString()
+      maxStudents: 20
     };
 
-    saveGroups([...groups, newGroup]);
+    await addGroup(groupData);
 
-    loadGroups();
+    await loadGroups();
     setFormData({ name: '', level: 'Beginner', description: '' });
     setShowAddModal(false);
   };
@@ -75,32 +72,29 @@ export default function GroupsPage() {
     setShowEditModal(true);
   };
 
-  const handleUpdateGroup = () => {
+  const handleUpdateGroup = async () => {
     if (!editingGroup || !formData.name) {
       alert('Please enter group name');
       return;
     }
 
-    const allGroups = getGroups();
-    const updatedGroups = allGroups.map(g => 
-      g.id === editingGroup.id 
-        ? { ...g, name: formData.name, level: formData.level, description: formData.description }
-        : g
-    );
-    saveGroups(updatedGroups);
+    const updatedData = {
+      name: formData.name,
+      level: formData.level,
+      description: formData.description
+    };
+    await updateGroup(editingGroup.id, updatedData);
 
-    loadGroups();
+    await loadGroups();
     setFormData({ name: '', level: 'Beginner', description: '' });
     setEditingGroup(null);
     setShowEditModal(false);
   };
 
-  const handleDeleteGroup = (id: string) => {
+  const handleDeleteGroup = async (id: string) => {
     if (confirm('Are you sure you want to delete this group?')) {
-    const groups = getGroups();
-    const filteredGroups = groups.filter(g => g.id !== id);
-    saveGroups(filteredGroups);
-      loadGroups();
+      await deleteGroup(id);
+      await loadGroups();
     }
   };
 

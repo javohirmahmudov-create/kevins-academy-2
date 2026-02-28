@@ -17,10 +17,10 @@ export async function POST(req: Request) {
     const body = await req.json()
     const student = await prisma.student.create({
       data: {
-        name: body.name,
+        name: body.fullName || body.name || '',
         email: body.email || `${Date.now()}@test.com`,
-        phone: body.phone,
-        group: body.group,
+        phone: body.phone || '',
+        group: body.group || '',
         username: body.username || `user_${Date.now()}`,
         password: body.password || '123456'
       }
@@ -36,32 +36,42 @@ export async function POST(req: Request) {
 
 // O'CHIRISH (DELETE)
 export async function DELETE(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 });
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 });
 
-  await prisma.student.delete({
-    where: { id: parseInt(id) }
-  });
-  return NextResponse.json({ success: true });
+    await prisma.student.delete({
+      where: { id: String(id) }
+    });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: 'O\'chirishda xatolik' }, { status: 500 });
+  }
 }
 
 // TAHRIRLASH (PUT)
 export async function PUT(req: Request) {
-  const body = await req.json();
-  const { id, ...updateData } = body;
+  try {
+    const body = await req.json();
+    const { id, ...updateData } = body;
 
-  const updated = await prisma.student.update({
-    where: { id: parseInt(id) },
-    data: {
-      name: updateData.fullName,
-      email: updateData.email,
-      phone: updateData.phone,
-      groupName: updateData.group,
-      username: updateData.username,
-      // Faqat parol yuborilsa yangilaymiz
-      ...(updateData.password && { password: updateData.password })
-    }
-  });
-  return NextResponse.json(updated);
+    const updated = await prisma.student.update({
+      where: { id: String(id) },
+      data: {
+        name: updateData.fullName || updateData.name,
+        email: updateData.email,
+        phone: updateData.phone || '',
+        group: updateData.group || '',
+        username: updateData.username,
+        // Faqat parol yuborilsa yangilaymiz
+        ...(updateData.password && { password: updateData.password })
+      }
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: 'Yangilashda xatolik' }, { status: 500 });
+  }
 }

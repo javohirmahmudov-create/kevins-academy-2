@@ -36,13 +36,19 @@ export default function StudentLessonsPage() {
   useEffect(() => {
     if (!student?.adminId) return;
 
-    const adminId = student.adminId;
-    const allMaterials = getDataForAdmin(adminId, 'materials') || [];
-    const studentMaterials = allMaterials
-      .filter((m: any) => m.group === student.group)
-      .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    (async () => {
+      try {
+        const adminId = student.adminId;
+        const allMaterials = (await getDataForAdmin(adminId, 'materials')) || [];
+        const studentMaterials = allMaterials
+          .filter((m: any) => m.group === student.group)
+          .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
-    setMaterials(studentMaterials);
+        setMaterials(studentMaterials);
+      } catch (error) {
+        console.error('Error loading materials:', error);
+      }
+    })();
   }, [student]);
 
   const handleDownload = async (material: any) => {

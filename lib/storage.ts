@@ -30,183 +30,169 @@ export interface Material { id: string; title: string; adminId?: string }
 export interface Score { id: string; studentId?: string; value?: number; adminId?: string }
 export interface Parent { id: string; adminId?: string }
 
-export class AdminStorage {
-  // ADMIN MANAGEMENT
-  getAdmins = (): any[] => {
-    try {
-      const raw = localStorage.getItem('kevins_academy_admins');
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      console.error(e);
-      return [];
-    }
-  };
-
-  getAdminByUsername = (username: string): any => {
-    const admins = this.getAdmins();
-    return admins.find(a => a.username === username);
-  };
-
-  createAdmin = (data: any): any => {
-    const admins = this.getAdmins();
-    const newAdmin = { ...data, id: `admin_${Date.now()}`, createdAt: new Date().toISOString() };
-    admins.push(newAdmin);
-    localStorage.setItem('kevins_academy_admins', JSON.stringify(admins));
-    return newAdmin;
-  };
-
-  updateAdmin = (id: string, data: any): void => {
-    const admins = this.getAdmins();
-    const idx = admins.findIndex(a => a.id === id);
-    if (idx !== -1) {
-      admins[idx] = { ...admins[idx], ...data };
-      localStorage.setItem('kevins_academy_admins', JSON.stringify(admins));
-    }
-  };
-
-  // 1. O'QUVCHILARNI OLISH (localStorage-backed)
-  getStudents = (): Student[] => {
-    try {
-      const raw = localStorage.getItem('kevins_academy_students');
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) { console.error(e); return []; }
-  };
-
-  // 2. YANGI O'QUVCHI QO'SHISH (localStorage)
-  addStudent = (data: any): Student => {
-    const students = this.getStudents();
-    const newStudent = { ...data, id: `student_${Date.now()}` };
-    students.push(newStudent);
-    localStorage.setItem('kevins_academy_students', JSON.stringify(students));
-    return newStudent;
-  };
-
-  // 3. O'CHIRISH
-  deleteStudent = (id: string): void => {
-    const students = this.getStudents().filter(s => s.id !== id);
-    localStorage.setItem('kevins_academy_students', JSON.stringify(students));
-  };
-
-  // 4. TAHRIRLASH (UPDATE)
-  updateStudent = (id: string, data: any): void => {
-    const students = this.getStudents();
-    const idx = students.findIndex(s => s.id === id);
-    if (idx !== -1) {
-      students[idx] = { ...students[idx], ...data };
-      localStorage.setItem('kevins_academy_students', JSON.stringify(students));
-    }
-  };
-
-  // GURUHLARNI OLISH (Vaqtinchalik mock yoki API)
-  getGroups = (): Group[] => {
-    try {
-      const raw = localStorage.getItem('kevins_academy_groups');
-      if (raw) return JSON.parse(raw);
-      return [
-        { id: '1', name: 'Beginner A1' },
-        { id: '2', name: 'Intermediate B1' }
-      ];
-    } catch (e) { return []; }
-  };
-
-  // Save groups to localStorage
-  saveGroups = (groups: Group[]) => {
-    try {
-      localStorage.setItem('kevins_academy_groups', JSON.stringify(groups));
-    } catch (e) { console.error(e); }
-  };
-
-  saveStudents = (students: Student[]) => {
-    try { localStorage.setItem('kevins_academy_students', JSON.stringify(students)); } catch (e) { console.error(e); }
-  };
-
-  // Parents
-  getParents = (): Parent[] => {
-    try { const raw = localStorage.getItem('kevins_academy_parents'); return raw ? JSON.parse(raw) : []; } catch { return []; }
-  };
-  saveParents = (parents: Parent[]) => { try { localStorage.setItem('kevins_academy_parents', JSON.stringify(parents)); } catch (e) { console.error(e); } };
-
-  // Payments / Attendance generic storage
-  getPayments = (): Payment[] => {
-    try { const raw = localStorage.getItem('kevins_academy_payments'); return raw ? JSON.parse(raw) : []; } catch { return []; }
-  };
-  savePayments = (payments: Payment[]) => { localStorage.setItem('kevins_academy_payments', JSON.stringify(payments)); };
-
-  getAttendance = (): Attendance[] => {
-    try { const raw = localStorage.getItem('kevins_academy_attendance'); return raw ? JSON.parse(raw) : []; } catch { return []; }
-  };
-  saveAttendance = (attendance: Attendance[]) => { localStorage.setItem('kevins_academy_attendance', JSON.stringify(attendance)); };
-
-  // Generic data per-admin type (students, parents, materials, scores, etc.)
-  getDataForAdmin = (adminId: string, type: string): any[] => {
-    try {
-      const raw = localStorage.getItem(`kevins_academy_${type}`);
-      const all = raw ? JSON.parse(raw) : [];
-      return all.filter((it: any) => it.adminId === adminId || it.adminId == null);
-    } catch (e) { return []; }
-  };
-  saveDataForType = (type: string, data: any[]) => {
-    try { localStorage.setItem(`kevins_academy_${type}`, JSON.stringify(data)); } catch (e) { console.error(e); }
-  };
-
-  // Materials convenience
-  getMaterials = (): Material[] => {
-    try { const raw = localStorage.getItem('kevins_academy_materials'); return raw ? JSON.parse(raw) : []; } catch { return []; }
-  };
-  saveMaterials = (materials: Material[]) => { try { localStorage.setItem('kevins_academy_materials', JSON.stringify(materials)); } catch (e) { console.error(e); } };
-
-  // Scores convenience
-  getScores = (): Score[] => {
-    try { const raw = localStorage.getItem('kevins_academy_scores'); return raw ? JSON.parse(raw) : []; } catch { return []; }
-  };
-  saveScores = (scores: Score[]) => { try { localStorage.setItem('kevins_academy_scores', JSON.stringify(scores)); } catch (e) { console.error(e); } };
-
-  // Admin management helpers
-  deleteAdmin = (id: string) => {
-    try {
-      const raw = localStorage.getItem('kevins_academy_admins');
-      const admins = raw ? JSON.parse(raw) : [];
-      const filtered = admins.filter((a: any) => a.id !== id);
-      localStorage.setItem('kevins_academy_admins', JSON.stringify(filtered));
-    } catch (e) { console.error(e); }
-  };
+// small wrapper to call our API
+async function apiFetch(path: string, opts: RequestInit = {}) {
+  const res = await fetch(path, { credentials: 'include', ...opts });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `${res.status}`);
+  }
+  return res.json();
 }
 
-export const adminStorage = new AdminStorage();
-
-// export individual helpers here as well to keep the API consistent with the
-// full project version (and to avoid any undefined method problems if other
-// code accidentally pulls in the root storage).
-// simple wrappers; arguments are explicit so we avoid spread/tuple errors
-export const getAdmins = () => adminStorage.getAdmins();
-export const getAdminByUsername = (username: string) =>
-  // @ts-ignore - stub may not implement this yet
-  (adminStorage as any).getAdminByUsername?.(username);
+// ---- Admin helpers --------------------------------------------------------
+export const getAdmins = () => apiFetch('/api/admins');
 export const createAdmin = (data: any) =>
-  (adminStorage as any).createAdmin?.(data);
+  apiFetch('/api/admins', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
 export const updateAdmin = (id: string, data: any) =>
-  (adminStorage as any).updateAdmin?.(id, data);
+  apiFetch('/api/admins', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...data }),
+  });
+export const deleteAdmin = (id: string) =>
+  apiFetch(`/api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
-// groups / students / payments wrappers
-export const getGroups = () => (adminStorage as any).getGroups?.();
-export const saveGroups = (groups: Group[]) => (adminStorage as any).saveGroups?.(groups);
-export const getStudents = () => (adminStorage as any).getStudents?.();
-export const addStudent = (data: any) => (adminStorage as any).addStudent?.(data);
-export const updateStudent = (id: string, data: any) => (adminStorage as any).updateStudent?.(id, data);
-export const deleteStudent = (id: string) => (adminStorage as any).deleteStudent?.(id);
-export const saveStudents = (students: Student[]) => (adminStorage as any).saveStudents?.(students);
+// ---- Groups ----------------------------------------------------------------
+export const getGroups = () => apiFetch('/api/groups');
+export const addGroup = (data: any) =>
+  apiFetch('/api/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+export const updateGroup = (id: string, data: any) =>
+  apiFetch('/api/groups', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...data }),
+  });
+export const deleteGroup = (id: string) =>
+  apiFetch(`/api/groups?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
-export const getPayments = () => (adminStorage as any).getPayments?.();
-export const savePayments = (payments: Payment[]) => (adminStorage as any).savePayments?.(payments);
-export const getAttendance = () => (adminStorage as any).getAttendance?.();
-export const saveAttendance = (attendance: Attendance[]) => (adminStorage as any).saveAttendance?.(attendance);
+// ---- Students -------------------------------------------------------------
+export const getStudents = () => apiFetch('/api/students');
+export const addStudent = (data: any) =>
+  apiFetch('/api/students', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+export const updateStudent = (id: string, data: any) =>
+  apiFetch('/api/students', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...data }),
+  });
+export const deleteStudent = (id: string) =>
+  apiFetch(`/api/students?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
-export const getDataForAdmin = (adminId: string, type: string) => (adminStorage as any).getDataForAdmin?.(adminId, type);
-export const saveDataForType = (type: string, data: any[]) => (adminStorage as any).saveDataForType?.(type, data);
-export const getMaterials = () => (adminStorage as any).getMaterials?.();
-export const saveMaterials = (materials: any[]) => (adminStorage as any).saveMaterials?.(materials);
-export const getScores = () => (adminStorage as any).getScores?.();
-export const saveScores = (scores: any[]) => (adminStorage as any).saveScores?.(scores);
-export const deleteAdmin = (id: string) => (adminStorage as any).deleteAdmin?.(id);
-export const getParents = () => (adminStorage as any).getParents?.();
-export const saveParents = (parents: any[]) => (adminStorage as any).saveParents?.(parents);
+// ---- Parents --------------------------------------------------------------
+export const getParents = () => apiFetch('/api/parents');
+export const addParent = (data: any) =>
+  apiFetch('/api/parents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+// ---- Payments -------------------------------------------------------------
+export const getPayments = () => apiFetch('/api/payments');
+export const addPayment = (data: any) =>
+  apiFetch('/api/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+// ---- Attendance -----------------------------------------------------------
+export const getAttendance = () => apiFetch('/api/attendance');
+export const addAttendance = (data: any) =>
+  apiFetch('/api/attendance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+// ---- Scores ---------------------------------------------------------------
+export const getScores = () => apiFetch('/api/scores');
+export const addScore = (data: any) =>
+  apiFetch('/api/scores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+// ---- Materials ------------------------------------------------------------
+export const getMaterials = () => apiFetch('/api/materials');
+export const addMaterial = (data: any) =>
+  apiFetch('/api/materials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+// Compatibility wrappers for older localStorage-style helpers
+export const getAdminByUsername = async (username: string) => {
+  const admins = await getAdmins();
+  return admins.find((a: any) => a.username === username);
+};
+
+export const saveGroups = async (groups: Group[]) => {
+  await Promise.all(groups.map((g: any) => (g.id ? updateGroup(g.id, g) : addGroup(g))));
+  return getGroups();
+};
+
+export const saveStudents = async (students: Student[]) => {
+  await Promise.all(students.map((s: any) => (s.id ? updateStudent(s.id, s) : addStudent(s))));
+  return getStudents();
+};
+
+export const savePayments = async (payments: Payment[]) => {
+  await Promise.all(payments.map((p: any) => (p.id ? apiFetch(`/api/payments?id=${encodeURIComponent(p.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }) : addPayment(p))));
+  return getPayments();
+};
+
+export const saveAttendance = async (attendance: Attendance[]) => {
+  await Promise.all(attendance.map((a: any) => (a.id ? apiFetch(`/api/attendance?id=${encodeURIComponent(a.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a) }) : addAttendance(a))));
+  return getAttendance();
+};
+
+export const saveMaterials = async (materials: Material[]) => {
+  await Promise.all(materials.map((m: any) => (m.id ? apiFetch(`/api/materials?id=${encodeURIComponent(m.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m) }) : addMaterial(m))));
+  return getMaterials();
+};
+
+export const saveScores = async (scores: Score[]) => {
+  await Promise.all(scores.map((s: any) => (s.id ? apiFetch(`/api/scores?id=${encodeURIComponent(s.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) }) : addScore(s))));
+  return getScores();
+};
+
+export const saveParents = async (parents: Parent[]) => {
+  await Promise.all(parents.map((p: any) => (p.id ? apiFetch(`/api/parents?id=${encodeURIComponent(p.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }) : addParent(p))));
+  return getParents();
+};
+
+// Generic data getter (returns appropriate collection based on type)
+export const getDataForAdmin = async (adminId: string, resourceType: 'scores' | 'materials' | 'parents' | 'students' | 'attendance' | 'payments') => {
+  switch (resourceType) {
+    case 'scores':
+      return getScores();
+    case 'materials':
+      return getMaterials();
+    case 'parents':
+      return getParents();
+    case 'students':
+      return getStudents();
+    case 'attendance':
+      return getAttendance();
+    case 'payments':
+      return getPayments();
+    default:
+      return [];
+  }
+};

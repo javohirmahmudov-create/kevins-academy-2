@@ -30,40 +30,41 @@ export default function Home() {
   const [error, setError] = useState('');
 
   // Demo admin yaratish
-// Demo admin yaratish
   useEffect(() => {
-    try {
-      if (typeof getAdmins !== 'function') return;
+    (async () => {
+      try {
+        if (typeof getAdmins !== 'function') return;
 
-      const existingAdmins = getAdmins();
-      const demoAdmin = existingAdmins.find(admin => admin.username === 'admin');
-      const kevinAdmin = existingAdmins.find(admin => admin.username === 'kevin_teacher');
+        const existingAdmins = await getAdmins();
+        const demoAdmin = existingAdmins.find(admin => admin.username === 'admin');
+        const kevinAdmin = existingAdmins.find(admin => admin.username === 'kevin_teacher');
 
-      // Faqat adminlar yo'q bo'lsa yaratamiz (Dizayn to'lib turishi uchun)
-      if (!demoAdmin) {
-        createAdmin({
-          username: 'admin',
-          password: 'admin123',
-          fullName: 'Demo Administrator',
-          email: 'admin@kevinsacademy.com'
-        });
+        // Faqat adminlar yo'q bo'lsa yaratamiz (Dizayn to'lib turishi uchun)
+        if (!demoAdmin) {
+          await createAdmin({
+            username: 'admin',
+            password: 'admin123',
+            fullName: 'Demo Administrator',
+            email: 'admin@kevinsacademy.com'
+          });
+        }
+
+        if (!kevinAdmin) {
+          await createAdmin({
+            username: 'kevin_teacher',
+            password: 'kevin_0209',
+            fullName: 'Kevin Teacher',
+            email: 'kevin@kevinsacademy.com'
+          });
+        } else if (kevinAdmin.password !== 'kevin_0209') {
+          await updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
+        }
+
+        console.log('✅ Demo admins ready!');
+      } catch (error) {
+        console.error('❌ Error setting up demo admins:', error);
       }
-
-      if (!kevinAdmin) {
-        createAdmin({
-          username: 'kevin_teacher',
-          password: 'kevin_0209',
-          fullName: 'Kevin Teacher',
-          email: 'kevin@kevinsacademy.com'
-        });
-      } else if (kevinAdmin.password !== 'kevin_0209') {
-        updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
-      }
-
-      console.log('✅ Demo admins ready!');
-    } catch (error) {
-      console.error('❌ Error setting up demo admins:', error);
-    }
+    })();
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {

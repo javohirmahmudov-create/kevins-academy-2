@@ -36,11 +36,11 @@ export default function StudentsPage() {
   });
 
   // --- MA'LUMOTLARNI YUKLASH (BAZADAN) ---
-  const loadData = () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const fetchedStudents = getStudents();
-      const fetchedGroups = getGroups();
+      const fetchedStudents = await getStudents();
+      const fetchedGroups = await getGroups();
       setStudents(fetchedStudents);
       setGroups(fetchedGroups);
     } catch (error) {
@@ -55,14 +55,14 @@ export default function StudentsPage() {
   }, []);
 
   // --- O'QUVCHI QO'SHISH ---
-  const handleAddStudent = () => {
+  const handleAddStudent = async () => {
     if (!formData.fullName || !formData.email || !formData.username || !formData.password) {
       alert('Iltimos, barcha majburiy maydonlarni to\'ldiring');
       return;
     }
 
     try {
-      addStudent({
+      await addStudent({
         fullName: formData.fullName,
         email: formData.email,
         phone: formData.phone,
@@ -71,7 +71,7 @@ export default function StudentsPage() {
         password: formData.password
       });
 
-      loadData(); // Ro'yxatni yangilash
+      await loadData(); // Ro'yxatni yangilash
       setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
       setShowAddModal(false);
     } catch (err) {
@@ -93,14 +93,14 @@ export default function StudentsPage() {
     setShowEditModal(true);
   };
 
-  const handleUpdateStudent = () => {
+  const handleUpdateStudent = async () => {
     if (!editingStudent || !formData.fullName || !formData.email) {
       alert('Majburiy maydonlarni to\'ldiring');
       return;
     }
 
     try {
-      updateStudent(editingStudent.id, {
+      await updateStudent(editingStudent.id, {
         fullName: formData.fullName,
         email: formData.email,
         phone: formData.phone,
@@ -109,7 +109,7 @@ export default function StudentsPage() {
         password: formData.password || undefined
       });
 
-      loadData();
+      await loadData();
       setShowEditModal(false);
       setEditingStudent(null);
     } catch (err) {
@@ -118,11 +118,11 @@ export default function StudentsPage() {
   };
 
   // --- O'CHIRISH ---
-  const handleDeleteStudent = (id: string) => {
+  const handleDeleteStudent = async (id: string) => {
     if (confirm('O\'quvchini o\'chirishga aminmisiz?')) {
       try {
-        deleteStudent(id);
-        loadData();
+        await deleteStudent(id);
+        await loadData();
       } catch (err) {
         alert("O'chirishda xato");
       }

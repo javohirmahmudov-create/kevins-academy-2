@@ -51,15 +51,15 @@ export default function ParentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadChildData = (sessionParent: ParentSession) => {
+  const loadChildData = async (sessionParent: ParentSession) => {
     setLoading(true);
     setError(null);
 
     try {
-      const parents = (getDataForAdmin(sessionParent.adminId, 'parents') as Parent[] | null) || [];
+      const parents = (await getDataForAdmin(sessionParent.adminId, 'parents') as Parent[] | null) || [];
       const parentRecord = parents.find(p => p.id === sessionParent.id) || sessionParent;
 
-      const students = (getDataForAdmin(sessionParent.adminId, 'students') as Student[] | null) || [];
+      const students = (await getDataForAdmin(sessionParent.adminId, 'students') as Student[] | null) || [];
       const child = students.find(s => s.id === parentRecord.studentId);
 
       if (!child) {
@@ -70,13 +70,13 @@ export default function ParentDashboard() {
         return;
       }
 
-      const scores = (getDataForAdmin(sessionParent.adminId, 'scores') as Score[] | null) || [];
+      const scores = (await getDataForAdmin(sessionParent.adminId, 'scores') as Score[] | null) || [];
       const childScores = scores.filter(score => score.studentName === child.fullName);
 
-      const attendance = (getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || [];
+      const attendance = (await getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || [];
       const childAttendance = attendance.filter(record => record.studentName === child.fullName);
 
-      const payments = (getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || [];
+      const payments = (await getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || [];
       const childPayments = payments.filter(payment => payment.studentName === child.fullName);
       const latestPayment = childPayments[childPayments.length - 1];
 
@@ -161,11 +161,11 @@ export default function ParentDashboard() {
   };
 
   useEffect(() => {
-    const resolveSession = () => {
+    const resolveSession = async () => {
       if (currentParent) {
         const session = currentParent as ParentSession;
         setParentSession(session);
-        loadChildData(session);
+        await loadChildData(session);
         return;
       }
 
@@ -174,7 +174,7 @@ export default function ParentDashboard() {
         try {
           const parsed = JSON.parse(stored) as ParentSession;
           setParentSession(parsed);
-          loadChildData(parsed);
+          await loadChildData(parsed);
           return;
         } catch (err) {
           console.warn('Failed to parse stored parent session', err);
@@ -192,7 +192,7 @@ export default function ParentDashboard() {
 
   useEffect(() => {
     if (!parentSession) return;
-    const handleThemeChange = () => loadChildData(parentSession);
+    const handleThemeChange = async () => await loadChildData(parentSession);
     window.addEventListener('themeChanged', handleThemeChange);
     return () => window.removeEventListener('themeChanged', handleThemeChange);
   }, [parentSession]);

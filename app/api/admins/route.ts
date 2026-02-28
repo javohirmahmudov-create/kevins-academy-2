@@ -19,3 +19,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, ...data } = body;
+    const updated = await prisma.admin.update({
+      where: { id: String(id) },
+      data,
+    });
+    return NextResponse.json(updated);
+  } catch (error) {
+    return NextResponse.json({ error: 'Update error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'ID missing' }, { status: 400 });
+    await prisma.admin.delete({ where: { id: String(id) } });
+    return NextResponse.json({ message: 'Deleted' });
+  } catch (error) {
+    return NextResponse.json({ error: 'Delete error' }, { status: 500 });
+  }
+}

@@ -76,7 +76,10 @@ export default function MaterialsPage() {
         method: 'POST',
         body: form
       });
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.details || errBody.error || 'Upload failed');
+      }
       const newMaterial = await res.json();
 
       // refresh list from storage (now backed by server)
@@ -89,9 +92,9 @@ export default function MaterialsPage() {
       setSelectedFile(null);
       setShowAddModal(false);
       setUploading(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
-      alert('Error uploading file');
+      alert('Error uploading file: ' + (error.message || error));
       setUploading(false);
     }
   };

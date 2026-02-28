@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+
 export async function GET() {
   try {
     const materials = await prisma.material.findMany({ orderBy: { createdAt: 'desc' } })
@@ -26,11 +27,17 @@ export async function POST(request: Request) {
       if (file) {
         const buf = Buffer.from(await file.arrayBuffer());
         const filename = `${Date.now()}_${file.name}`;
-        const dir = process.cwd() + '/public/uploads';
-        await import('fs').then(fs => fs.mkdirSync(dir, { recursive: true }));
-        const path = `${dir}/${filename}`;
-        await import('fs').then(fs => fs.writeFileSync(path, buf));
-        data.fileUrl = `/uploads/${filename}`;
+        // use /tmp in production since filesystem is read-only outside of /tmp on Vercel
+        const baseDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : process.cwd() + '/public/uploads';
+        await import('fs').then(fs => fs.mkdirSync(baseDir, { recursive: true }));
+        const path = `${baseDir}/${filename}`;
+        try {
+          await import('fs').then(fs => fs.writeFileSync(path, buf));
+        } catch (fsErr) {
+          console.error('failed to write file', fsErr);
+          throw new Error(`file save error: ${fsErr.message}`);
+        }
+        data.fileUrl = process.env.NODE_ENV === 'production' ? `/tmp/uploads/${filename}` : `/uploads/${filename}`;
       }
       data.content = form.get('content') as string | null;
       const due = form.get('dueDate') as string;
@@ -48,9 +55,13 @@ export async function POST(request: Request) {
 
     const material = await prisma.material.create({ data });
     return NextResponse.json(material);
-  } catch (error) {
+  } catch (error: any) {
+    // return the actual message as well as full error object
     console.error('materials POST error', error);
-    return NextResponse.json({ error: 'Xatolik', details: String(error) }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Xatolik', details: String(error) },
+      { status: 500 }
+    );
   }
 }
 

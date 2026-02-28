@@ -37,7 +37,7 @@ export async function DELETE(req: Request) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 })
     
-    await prisma.group.delete({ where: { id: String(id) } })
+    await prisma.group.delete({ where: { id: parseInt(id) } })
     return NextResponse.json({ message: 'Oʻchirildi' })
   } catch (error) {
     return NextResponse.json({ error: 'Oʻchirishda xatolik' }, { status: 500 })
@@ -48,7 +48,7 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, ...data } = body;
-    const updated = await prisma.group.update({ where: { id: String(id) }, data });
+    const updated = await prisma.group.update({ where: { id: parseInt(id) }, data });
     return NextResponse.json(updated);
   } catch (error) {
     return NextResponse.json({ error: 'Update error' }, { status: 500 });

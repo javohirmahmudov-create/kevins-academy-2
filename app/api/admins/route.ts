@@ -25,7 +25,7 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { id, ...data } = body;
     const updated = await prisma.admin.update({
-      where: { id: String(id) },
+      where: { id: parseInt(id) },
       data,
     });
     return NextResponse.json(updated);
@@ -39,7 +39,7 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'ID missing' }, { status: 400 });
-    await prisma.admin.delete({ where: { id: String(id) } });
+    await prisma.admin.delete({ where: { id: parseInt(id) } });
     return NextResponse.json({ message: 'Deleted' });
   } catch (error) {
     return NextResponse.json({ error: 'Delete error' }, { status: 500 });

@@ -20,9 +20,9 @@ export async function POST(req: Request) {
         fullName: body.fullName || body.name || '',
         email: body.email || `${Date.now()}@test.com`,
         phone: body.phone || '',
-        group: body.group || '',
         username: body.username || `user_${Date.now()}`,
-        password: body.password || '123456'
+        password: body.password || '123456',
+        status: body.status || 'active'
       }
     })
     return NextResponse.json(student)
@@ -42,7 +42,7 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 });
 
     await prisma.student.delete({
-      where: { id: String(id) }
+      where: { id: parseInt(id) }
     });
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -58,13 +58,13 @@ export async function PUT(req: Request) {
     const { id, ...updateData } = body;
 
     const updated = await prisma.student.update({
-      where: { id: String(id) },
+      where: { id: parseInt(id) },
       data: {
         fullName: updateData.fullName || updateData.name,
         email: updateData.email,
         phone: updateData.phone || '',
-        group: updateData.group || '',
         username: updateData.username,
+        status: updateData.status,
         // Faqat parol yuborilsa yangilaymiz
         ...(updateData.password && { password: updateData.password })
       }

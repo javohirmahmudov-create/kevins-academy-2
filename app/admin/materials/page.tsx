@@ -28,13 +28,14 @@ export default function MaterialsPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    const allMaterials = getMaterials();
-    // Sort by uploadedAt descending (newest first)
-    const sortedMaterials = allMaterials.sort((a, b) => 
-      new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-    );
-    setMaterials(sortedMaterials);
-    setGroups(getGroups());
+    (async () => {
+      const allMaterials = await getMaterials();
+      const sortedMaterials = (allMaterials || []).sort((a: any, b: any) =>
+        new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+      );
+      setMaterials(sortedMaterials);
+      setGroups(await getGroups());
+    })();
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +69,7 @@ export default function MaterialsPage() {
       await saveFile(materialId, selectedFile);
       
       // Save material metadata to localStorage
-      saveMaterials([...getMaterials(), {
+      await saveMaterials([...(await getMaterials()), {
         id: `material_${Date.now()}`,
         title: formData.title,
         description: formData.title, // Using title as description for now
@@ -79,8 +80,8 @@ export default function MaterialsPage() {
         uploadedAt: new Date().toISOString()
       }]);
 
-      const allMaterials = getMaterials();
-      const sortedMaterials = allMaterials.sort((a, b) => 
+      const allMaterials = await getMaterials();
+      const sortedMaterials = (allMaterials || []).sort((a: any, b: any) => 
         new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
       );
       setMaterials(sortedMaterials);
@@ -195,8 +196,8 @@ export default function MaterialsPage() {
                           if (material.fileUrl) {
                             await deleteFile(material.fileUrl);
                           }
-                          saveMaterials(getMaterials().filter(m => m.id !== material.id));
-                          const allMaterials = getMaterials();
+                          await saveMaterials((await getMaterials()).filter((m: any) => m.id !== material.id));
+                          const allMaterials = await getMaterials();
                           const sortedMaterials = allMaterials.sort((a, b) => 
                             new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
                           );

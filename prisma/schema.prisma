@@ -23,20 +23,18 @@ model Group {
   teacher   String?
   schedule  String?
   maxStudents Int?
-  students  Student[]
   createdAt DateTime  @default(now())
 }
 
 model Student {
   id        Int      @id @default(autoincrement())
   fullName  String
-  email     String
+  email     String   @unique
   phone     String
   username  String   @unique
   password  String
   status    String   @default("active")
-  group     Group?   @relation(fields: [groupId], references: [id])
-  groupId   Int?
+  group     String?
   createdAt DateTime @default(now())
 }
 

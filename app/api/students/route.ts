@@ -8,7 +8,8 @@ export async function GET() {
     })
     return NextResponse.json(students)
   } catch (error) {
-    return NextResponse.json({ error: 'Xatolik yuz berdi' }, { status: 500 })
+    console.error('GET /api/students error:', error)
+    return NextResponse.json({ error: 'Database error', details: String(error) }, { status: 500 })
   }
 }
 

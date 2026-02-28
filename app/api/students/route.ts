@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const student = await prisma.student.create({
       data: {
-        name: body.fullName || body.name || '',
+        fullName: body.fullName || body.name || '',
         email: body.email || `${Date.now()}@test.com`,
         phone: body.phone || '',
         group: body.group || '',
@@ -60,7 +60,7 @@ export async function PUT(req: Request) {
     const updated = await prisma.student.update({
       where: { id: String(id) },
       data: {
-        name: updateData.fullName || updateData.name,
+        fullName: updateData.fullName || updateData.name,
         email: updateData.email,
         phone: updateData.phone || '',
         group: updateData.group || '',

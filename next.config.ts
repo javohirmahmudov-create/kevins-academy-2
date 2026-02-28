@@ -2,10 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  eslint: {
-    // Build paytida ESLint xatolarini tekshirmaslik uchun
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     // Build paytida TypeScript xatolarini tekshirmaslik uchun
     ignoreBuildErrors: true,

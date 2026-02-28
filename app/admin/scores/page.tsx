@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, TrendingUp, User } from 'lucide-react';
-import { adminStorage, Score } from '@/lib/storage';
+import { getScores, saveScores, getStudents, getGroups, Score } from '@/lib/storage';
 
 type ScoreFormData = {
   studentName: string;
@@ -34,9 +34,9 @@ export default function ScoresPage() {
   const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
-    setScores(adminStorage.getScores());
-    setStudents(adminStorage.getStudents());
-    setGroups(adminStorage.getGroups());
+    setScores(getScores());
+    setStudents(getStudents());
+    setGroups(getGroups());
   }, []);
 
   const [formData, setFormData] = useState<ScoreFormData>(createEmptyFormData());
@@ -70,7 +70,7 @@ export default function ScoresPage() {
       return;
     }
 
-    const existingScores = adminStorage.getScores();
+    const existingScores = getScores();
     const { studentName, ...metrics } = formData;
     const normalizedMetrics = Object.entries(metrics).reduce<Record<string, number>>((acc, [key, value]) => {
       const numericValue = typeof value === 'number' ? value : Number(value);
@@ -87,8 +87,8 @@ export default function ScoresPage() {
       ...normalizedMetrics
     };
 
-    adminStorage.saveScores([...existingScores, newScore]);
-    setScores(adminStorage.getScores());
+    saveScores([...existingScores, newScore]);
+    setScores(getScores());
     setFormData(createEmptyFormData());
     setShowAddModal(false);
   };

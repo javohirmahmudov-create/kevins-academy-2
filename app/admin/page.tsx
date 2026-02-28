@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeLanguageToggle } from '@/components/theme-language-toggle';
 import { useApp } from '@/lib/app-context';
-import { adminStorage } from '@/lib/storage';
+import { getStudents, getGroups, getPayments, getAttendance } from '@/lib/storage';
 import {
   Users,
   BookOpen,
@@ -54,10 +54,10 @@ export default function AdminDashboard() {
 
   const loadStats = () => {
     try {
-      const students = adminStorage.getStudents();
-      const groups = adminStorage.getGroups();
-      const payments = adminStorage.getPayments();
-      const attendance = adminStorage.getAttendance();
+      const students = getStudents();
+      const groups = getGroups();
+      const payments = getPayments();
+      const attendance = getAttendance();
 
       // Get today's date in YYYY-MM-DD format
       const today = new Date().toISOString().split('T')[0];

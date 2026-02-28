@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
-import { adminStorage, Material, Group } from '@/lib/storage';
+import { getMaterials, saveMaterials, getGroups, Material, Group } from '@/lib/storage';
 import { saveFile, getFile, deleteFile } from '@/lib/fileStorage';
 
 export default function MaterialsPage() {
@@ -28,13 +28,13 @@ export default function MaterialsPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    const allMaterials = adminStorage.getMaterials();
+    const allMaterials = getMaterials();
     // Sort by uploadedAt descending (newest first)
     const sortedMaterials = allMaterials.sort((a, b) => 
       new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
     );
     setMaterials(sortedMaterials);
-    setGroups(adminStorage.getGroups());
+    setGroups(getGroups());
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +68,7 @@ export default function MaterialsPage() {
       await saveFile(materialId, selectedFile);
       
       // Save material metadata to localStorage
-      adminStorage.saveMaterials([...adminStorage.getMaterials(), {
+      saveMaterials([...getMaterials(), {
         id: `material_${Date.now()}`,
         title: formData.title,
         description: formData.title, // Using title as description for now
@@ -79,7 +79,7 @@ export default function MaterialsPage() {
         uploadedAt: new Date().toISOString()
       }]);
 
-      const allMaterials = adminStorage.getMaterials();
+      const allMaterials = getMaterials();
       const sortedMaterials = allMaterials.sort((a, b) => 
         new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
       );
@@ -195,8 +195,8 @@ export default function MaterialsPage() {
                           if (material.fileUrl) {
                             await deleteFile(material.fileUrl);
                           }
-                          adminStorage.saveMaterials(adminStorage.getMaterials().filter(m => m.id !== material.id));
-                          const allMaterials = adminStorage.getMaterials();
+                          saveMaterials(getMaterials().filter(m => m.id !== material.id));
+                          const allMaterials = getMaterials();
                           const sortedMaterials = allMaterials.sort((a, b) => 
                             new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
                           );

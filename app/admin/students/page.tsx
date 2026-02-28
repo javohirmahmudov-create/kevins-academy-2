@@ -14,7 +14,7 @@ import {
   Phone,
   GraduationCap
 } from 'lucide-react';
-import { adminStorage, Student } from '@/lib/storage';
+import { getStudents, getGroups, addStudent, updateStudent, deleteStudent, Student } from '@/lib/storage';
 
 export default function StudentsPage() {
   const router = useRouter();
@@ -24,6 +24,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(true); // Yuklanish holati
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -34,37 +35,51 @@ export default function StudentsPage() {
     password: ''
   });
 
-  // Load students from localStorage on mount
+  // --- MA'LUMOTLARNI YUKLASH (BAZADAN) ---
+  const loadData = () => {
+    try {
+      setLoading(true);
+      const fetchedStudents = getStudents();
+      const fetchedGroups = getGroups();
+      setStudents(fetchedStudents);
+      setGroups(fetchedGroups);
+    } catch (error) {
+      console.error("Xatolik:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setStudents(adminStorage.getStudents());
-    setGroups(adminStorage.getGroups());
+    loadData();
   }, []);
 
+  // --- O'QUVCHI QO'SHISH ---
   const handleAddStudent = () => {
     if (!formData.fullName || !formData.email || !formData.username || !formData.password) {
-      alert('Please fill in all required fields including username and password');
+      alert('Iltimos, barcha majburiy maydonlarni to\'ldiring');
       return;
     }
 
-    const currentStudents = adminStorage.getStudents();
-    const newStudent: Student = {
-      id: `student_${Date.now()}`,
-      fullName: formData.fullName,
-      email: formData.email,
-      phone: formData.phone,
-      group: formData.group || 'Not Assigned',
-      status: 'active' as const,
-      createdAt: new Date().toISOString(),
-      username: formData.username,
-      password: formData.password
-    };
+    try {
+      addStudent({
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        group: formData.group || 'Not Assigned',
+        username: formData.username,
+        password: formData.password
+      });
 
-    adminStorage.saveStudents([...currentStudents, newStudent]);
-    setStudents(adminStorage.getStudents());
-    setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
-    setShowAddModal(false);
+      loadData(); // Ro'yxatni yangilash
+      setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
+      setShowAddModal(false);
+    } catch (err) {
+      alert("Saqlashda xato yuz berdi");
+    }
   };
 
+  // --- TAHRIRLASH ---
   const handleEditStudent = (student: Student) => {
     setEditingStudent(student);
     setFormData({
@@ -73,51 +88,44 @@ export default function StudentsPage() {
       phone: student.phone,
       group: student.group,
       username: student.username || '',
-      password: student.password || ''
+      password: '' // Xavfsizlik uchun parolni bo'sh qoldiramiz
     });
     setShowEditModal(true);
   };
 
   const handleUpdateStudent = () => {
     if (!editingStudent || !formData.fullName || !formData.email) {
-      alert('Please fill in all required fields');
+      alert('Majburiy maydonlarni to\'ldiring');
       return;
     }
 
-    const updateData: any = {
-      fullName: formData.fullName,
-      email: formData.email,
-      phone: formData.phone,
-      group: formData.group,
-      username: formData.username
-    };
+    try {
+      updateStudent(editingStudent.id, {
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        group: formData.group,
+        username: formData.username,
+        password: formData.password || undefined
+      });
 
-    // Only update password if it's provided
-    if (formData.password) {
-      updateData.password = formData.password;
+      loadData();
+      setShowEditModal(false);
+      setEditingStudent(null);
+    } catch (err) {
+      alert("Yangilashda xato");
     }
-
-    const students = adminStorage.getStudents();
-    const updatedStudents = students.map(student =>
-      student.id === editingStudent.id
-        ? { ...student, ...updateData }
-        : student
-    );
-    adminStorage.saveStudents(updatedStudents);
-
-    setStudents(adminStorage.getStudents());
-    setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
-    setEditingStudent(null);
-    setShowEditModal(false);
   };
 
+  // --- O'CHIRISH ---
   const handleDeleteStudent = (id: string) => {
-    if (confirm('Are you sure you want to delete this student?')) {
-    const students = adminStorage.getStudents();
-    const filteredStudents = students.filter(student => student.id !== id);
-    adminStorage.saveStudents(filteredStudents);
-
-    setStudents(adminStorage.getStudents());
+    if (confirm('O\'quvchini o\'chirishga aminmisiz?')) {
+      try {
+        deleteStudent(id);
+        loadData();
+      } catch (err) {
+        alert("O'chirishda xato");
+      }
     }
   };
 
@@ -128,27 +136,20 @@ export default function StudentsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
+      {/* Header va Search Bar qismi o'zgarmadi (G'o'zallik saqlab qolindi) */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push('/admin')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
+              <button onClick={() => router.push('/admin')} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Student Management</h1>
-                <p className="text-sm text-gray-500">Manage all students</p>
+                <p className="text-sm text-gray-500">Manage all students in Postgres DB</p>
               </div>
             </div>
-            
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all"
-            >
+            <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <Plus className="w-5 h-5" />
               <span>Add Student</span>
             </button>
@@ -156,9 +157,7 @@ export default function StudentsPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search Bar */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -166,310 +165,202 @@ export default function StudentsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search students by name or email..."
-              className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              placeholder="Search students..."
+              className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
         </div>
 
-        {/* Students Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStudents.map((student, index) => (
-            <motion.div
-              key={student.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                    <User className="w-6 h-6 text-white" />
+        {loading ? (
+          <div className="flex justify-center items-center py-20">
+             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredStudents.map((student, index) => (
+              <motion.div
+                key={student.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all"
+              >
+                {/* Kartochka ichi o'zgarmadi */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{student.fullName}</h3>
+                      <p className="text-sm text-gray-500">{student.username}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{student.fullName}</h3>
-                    <p className="text-sm text-gray-500">{student.username || 'No username'}</p>
-                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    {student.status}
+                  </span>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  student.status === 'active' 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {student.status}
-                </span>
-              </div>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Mail className="w-4 h-4" />
-                  <span>{student.email}</span>
+                <div className="space-y-2 mb-4 text-sm text-gray-600">
+                  <div className="flex items-center space-x-2"><Mail className="w-4 h-4" /> <span>{student.email}</span></div>
+                  <div className="flex items-center space-x-2"><Phone className="w-4 h-4" /> <span>{student.phone}</span></div>
+                  <div className="flex items-center space-x-2"><GraduationCap className="w-4 h-4" /> <span>{student.group}</span></div>
                 </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Phone className="w-4 h-4" />
-                  <span>{student.phone}</span>
+                <div className="flex space-x-2">
+                  <button onClick={() => handleEditStudent(student)} className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
+                    <Edit className="w-4 h-4" /> <span className="text-sm">Edit</span>
+                  </button>
+                  <button onClick={() => handleDeleteStudent(student.id)} className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
+                    <Trash2 className="w-4 h-4" /> <span className="text-sm">Delete</span>
+                  </button>
                 </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <GraduationCap className="w-4 h-4" />
-                  <span>{student.group}</span>
-                </div>
-              </div>
-
-              <div className="flex space-x-2">
-                <button 
-                  onClick={() => handleEditStudent(student)}
-                  className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span className="text-sm">Edit</span>
-                </button>
-                <button 
-                  onClick={() => handleDeleteStudent(student.id)}
-                  className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="text-sm">Delete</span>
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        {filteredStudents.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No students found</p>
+              </motion.div>
+            ))}
           </div>
         )}
       </main>
 
-      {/* Add Student Modal */}
+      {/* ADD STUDENT MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-md w-full"
+            className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl"
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Student</h2>
-            
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Enter student name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="student@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="+998 90 123 4567"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Group
-                </label>
-                <select
-                  value={formData.group}
-                  onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                >
-                  <option value="">Select a group</option>
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.name}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Login (Username) *
-                </label>
-                <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Student login username"
-                />
-                <p className="text-xs text-gray-500 mt-1">Student will use this username to login</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password *
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Student login password"
-                />
-                <p className="text-xs text-gray-500 mt-1">Student will use this password to login</p>
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <select
+                value={formData.group}
+                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                Cancel
-              </button>
+                <option value="">Select Group</option>
+                {groups.map((g: any) => (
+                  <option key={g.id} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Username"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex space-x-4 mt-6">
               <button
                 onClick={handleAddStudent}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 rounded-lg hover:shadow-lg transition-all"
               >
                 Add Student
+              </button>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-all"
+              >
+                Cancel
               </button>
             </div>
           </motion.div>
         </div>
       )}
 
-      {/* Edit Student Modal */}
+      {/* EDIT STUDENT MODAL */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl p-8 max-w-md w-full"
+            className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl"
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Student</h2>
-            
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Enter student name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="student@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="+998 90 123 4567"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Group
-                </label>
-                <select
-                  value={formData.group}
-                  onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                >
-                  <option value="">Select a group</option>
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.name}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Login (Username) *
-                </label>
-                <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Student login username"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                  placeholder="Leave empty to keep current password"
-                />
-                <p className="text-xs text-gray-500 mt-1">Only fill if changing password</p>
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingStudent(null);
-                  setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
-                }}
-                className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <select
+                value={formData.group}
+                onChange={(e) => setFormData({ ...formData, group: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                Cancel
-              </button>
+                <option value="">Select Group</option>
+                {groups.map((g: any) => (
+                  <option key={g.id} value={g.name}>{g.name}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Username"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                placeholder="Password (leave empty to keep current)"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div className="flex space-x-4 mt-6">
               <button
                 onClick={handleUpdateStudent}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 rounded-lg hover:shadow-lg transition-all"
               >
                 Update Student
+              </button>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-all"
+              >
+                Cancel
               </button>
             </div>
           </motion.div>

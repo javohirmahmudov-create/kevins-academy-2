@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User } from 'lucide-react';
-import { adminStorage, Payment } from '@/lib/storage';
+import { getPayments, savePayments, getStudents, Payment } from '@/lib/storage';
 
 export default function PaymentsPage() {
   const router = useRouter();
@@ -13,8 +13,8 @@ export default function PaymentsPage() {
   const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
-    setPayments(adminStorage.getPayments());
-    setStudents(adminStorage.getStudents());
+    setPayments(getPayments());
+    setStudents(getStudents());
   }, []);
 
   const [formData, setFormData] = useState({
@@ -31,7 +31,7 @@ export default function PaymentsPage() {
       return;
     }
 
-    const payments = adminStorage.getPayments();
+    const payments = getPayments();
     const newPayment: Payment = {
       id: `payment_${Date.now()}`,
       studentName: formData.studentName,
@@ -41,8 +41,8 @@ export default function PaymentsPage() {
       dueDate: formData.dueDate
     };
 
-    adminStorage.savePayments([...payments, newPayment]);
-    setPayments(adminStorage.getPayments());
+    savePayments([...payments, newPayment]);
+    setPayments(getPayments());
     setFormData({ studentName: '', amount: 500000, month: 'October 2024', status: 'pending', dueDate: new Date().toISOString().split('T')[0] });
     setShowAddModal(false);
   };
@@ -71,8 +71,8 @@ export default function PaymentsPage() {
     const payment = payments.find(p => p.id === id);
     if (payment) {
       const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
-      adminStorage.savePayments(payments.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
-      setPayments(adminStorage.getPayments());
+      savePayments(payments.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
+      setPayments(getPayments());
     }
   };
 
@@ -139,7 +139,7 @@ export default function PaymentsPage() {
                         <button onClick={() => togglePaymentStatus(payment.id)} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
                           {payment.status === 'paid' ? 'Mark Unpaid' : 'Mark Paid'}
                         </button>
-                        <button onClick={() => { adminStorage.savePayments(adminStorage.getPayments().filter(p => p.id !== payment.id)); setPayments(adminStorage.getPayments()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
+                        <button onClick={() => { savePayments(getPayments().filter(p => p.id !== payment.id)); setPayments(getPayments()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
                       </div>
                     </td>
                   </motion.tr>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeLanguageToggle } from '@/components/theme-language-toggle';
 import { useApp } from '@/lib/app-context';
-import { adminStorage, Admin } from '@/lib/storage';
+import { getAdmins, createAdmin, updateAdmin, deleteAdmin, Admin } from '@/lib/storage';
 import {
   Users,
   Plus,
@@ -52,7 +52,7 @@ export default function AdminManagement() {
   }, [currentAdmin, router]);
 
   const loadAdmins = () => {
-    const allAdmins = adminStorage.getAdmins();
+    const allAdmins = getAdmins();
     setAdmins(allAdmins);
   };
 
@@ -65,7 +65,7 @@ export default function AdminManagement() {
     }
 
     try {
-      adminStorage.createAdmin(newAdmin);
+      createAdmin(newAdmin);
       setNewAdmin({ username: '', password: '', fullName: '', email: '' });
       setShowCreateForm(false);
       loadAdmins();
@@ -94,7 +94,7 @@ export default function AdminManagement() {
     }
 
     try {
-      adminStorage.updateAdmin(editingAdmin.id, editForm);
+      updateAdmin(editingAdmin.id, editForm);
       setEditingAdmin(null);
       setEditForm({ username: '', password: '', fullName: '', email: '' });
       loadAdmins();
@@ -108,7 +108,7 @@ export default function AdminManagement() {
     if (confirm(t('Are you sure you want to delete this admin?'))) {
       try {
         // Admin va uning barcha ma'lumotlarini o'chirish
-        adminStorage.deleteAdmin(adminId);
+        deleteAdmin(adminId);
 
         // Agar o'chirilgan admin joriy admin bo'lsa, logout qilish
         if (currentAdmin?.id === adminId) {

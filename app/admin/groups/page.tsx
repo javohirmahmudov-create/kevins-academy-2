@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, BookOpen, Edit, Trash2 } from 'lucide-react';
-import { adminStorage, Group } from '@/lib/storage';
+import { getGroups, getStudents, saveGroups, Group } from '@/lib/storage';
 
 export default function GroupsPage() {
   const router = useRouter();
@@ -28,8 +28,8 @@ export default function GroupsPage() {
   }, []);
 
   const loadGroups = () => {
-    const allGroups = adminStorage.getGroups();
-    const students = adminStorage.getStudents();
+    const allGroups = getGroups();
+    const students = getStudents();
     
     // Count students for each group
     const groupsWithCount = allGroups.map(group => ({
@@ -46,7 +46,7 @@ export default function GroupsPage() {
       return;
     }
 
-    const groups = adminStorage.getGroups();
+    const groups = getGroups();
     const newGroup = {
       id: `group_${Date.now()}`,
       name: formData.name,
@@ -58,7 +58,7 @@ export default function GroupsPage() {
       createdAt: new Date().toISOString()
     };
 
-    adminStorage.saveGroups([...groups, newGroup]);
+    saveGroups([...groups, newGroup]);
 
     loadGroups();
     setFormData({ name: '', level: 'Beginner', description: '' });
@@ -81,13 +81,13 @@ export default function GroupsPage() {
       return;
     }
 
-    const allGroups = adminStorage.getGroups();
+    const allGroups = getGroups();
     const updatedGroups = allGroups.map(g => 
       g.id === editingGroup.id 
         ? { ...g, name: formData.name, level: formData.level, description: formData.description }
         : g
     );
-    adminStorage.saveGroups(updatedGroups);
+    saveGroups(updatedGroups);
 
     loadGroups();
     setFormData({ name: '', level: 'Beginner', description: '' });
@@ -97,9 +97,9 @@ export default function GroupsPage() {
 
   const handleDeleteGroup = (id: string) => {
     if (confirm('Are you sure you want to delete this group?')) {
-    const groups = adminStorage.getGroups();
+    const groups = getGroups();
     const filteredGroups = groups.filter(g => g.id !== id);
-    adminStorage.saveGroups(filteredGroups);
+    saveGroups(filteredGroups);
       loadGroups();
     }
   };

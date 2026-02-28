@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, Mail, Phone, Trash2, Edit } from 'lucide-react';
-import { adminStorage, Parent } from '@/lib/storage';
+import { getParents, saveParents, getStudents, Parent } from '@/lib/storage'; // patched
 
 export default function ParentsPage() {
   const router = useRouter();
@@ -24,8 +24,8 @@ export default function ParentsPage() {
   });
 
   useEffect(() => {
-    setParents(adminStorage.getParents());
-    setStudents(adminStorage.getStudents());
+    setParents(getParents());
+    setStudents(getStudents());
   }, []);
 
   const handleAddParent = () => {

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, User, Mail, Phone, UserMinus } from 'lucide-react';
-import { AdminStorage as storage, Student, Group } from '@/lib/storage';
+import { getGroups, getStudents, updateStudent, Student, Group } from '@/lib/storage';
 export default function GroupDetailsPage() {
   const router = useRouter();
   const params = useParams();
@@ -16,14 +16,14 @@ export default function GroupDetailsPage() {
   }, [params.id]);
 
   const loadGroupDetails = () => {
-    const allGroups = storage.getGroups();
+    const allGroups = getGroups();
     const foundGroup = allGroups.find(g => g.id === params.id);
     
     if (foundGroup) {
       setGroup(foundGroup);
       
       // Get students in this group
-      const allStudents = storage.getStudents();
+      const allStudents = getStudents();
       const groupStudents = allStudents.filter(s => s.group === foundGroup.name);
       setStudents(groupStudents);
     }
@@ -31,7 +31,7 @@ export default function GroupDetailsPage() {
 
   const handleRemoveStudent = (studentId: string) => {
     if (confirm('Remove this student from the group?')) {
-      storage.updateStudent(studentId, { group: 'Not Assigned' });
+      updateStudent(studentId, { group: 'Not Assigned' });
       loadGroupDetails();
     }
   };

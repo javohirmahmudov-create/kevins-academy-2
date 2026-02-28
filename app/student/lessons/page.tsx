@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Download, FileText, Video, Image as ImageIcon, File } from 'lucide-react';
-import { adminStorage } from '@/lib/storage';
+import { getDataForAdmin } from '@/lib/storage';
 import { getFile } from '@/lib/fileStorage';
 import { useApp } from '@/lib/app-context';
 
@@ -37,7 +37,7 @@ export default function StudentLessonsPage() {
     if (!student?.adminId) return;
 
     const adminId = student.adminId;
-    const allMaterials = adminStorage.getDataForAdmin(adminId, 'materials') || [];
+    const allMaterials = getDataForAdmin(adminId, 'materials') || [];
     const studentMaterials = allMaterials
       .filter((m: any) => m.group === student.group)
       .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());

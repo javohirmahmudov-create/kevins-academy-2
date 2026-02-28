@@ -1,12 +1,11 @@
-// Local Storage Management for Kevin's Academy
+// lib/storage.ts
 
-// Student interface
 export interface Student {
   id: string;
   fullName: string;
   role?: 'student';
-  password?: string; // Student login password
-  username?: string; // Student login username
+  password?: string;
+  username?: string;
   email: string;
   phone: string;
   group: string;
@@ -14,457 +13,200 @@ export interface Student {
   createdAt: string;
 }
 
-// Group interface
 export interface Group {
   id: string;
   name: string;
-  description: string;
-  teacher: string;
-  schedule: string;
-  maxStudents: number;
-  level?: 'Beginner' | 'Elementary' | 'Intermediate' | 'Advanced';
-  studentCount?: number;
-  createdAt: string;
+  level?: string;
+  description?: string;
+  teacher?: string;
+  schedule?: string;
+  maxStudents?: number;
+  createdAt?: string;
 }
 
-// Material interface
-export interface Material {
-  id: string;
-  title: string;
-  description: string;
-  fileUrl: string;
-  fileType: string;
-  group: string;
-  uploadedBy: string;
-  uploadedAt: string;
-  dueDate?: string;
-}
+export interface Payment { id: string; amount: number; studentId?: string; adminId?: string; createdAt?: string }
+export interface Attendance { id: string; studentId?: string; date?: string; status?: string; adminId?: string }
+export interface Material { id: string; title: string; adminId?: string }
+export interface Score { id: string; studentId?: string; value?: number; adminId?: string }
+export interface Parent { id: string; adminId?: string }
 
-// Score interface
-export interface Score extends Record<string, number | string | undefined> {
-  id: string;
-  studentName: string;
-  createdAt: string;
-}
-
-// Attendance interface
-export interface Attendance {
-  id: string;
-  studentName: string;
-  date: string;
-  status: 'present' | 'absent' | 'late';
-  group: string;
-}
-// Payment interface
-export interface Payment {
-  id: string;
-  studentName: string;
-  amount: number;
-  month: string;
-  status: 'paid' | 'pending' | 'overdue';
-  dueDate: string;
-  paidDate?: string;
-}
-
-// Parent interface
-export interface Parent {
-  id: string;
-  fullName: string;
-  role?: 'parent';
-  email: string;
-  phone: string;
-  username?: string;
-  password?: string;
-  studentId: string;
-  createdAt: string;
-}
-
-// Admin interface
-export interface Admin {
-  id: string;
-  role?: 'admin';
-  username: string;
-  password: string; // In production, this should be hashed
-  fullName: string;
-  email: string;
-  createdAt: string;
-  isActive: boolean;
-}
-
-export type AuthRole = 'admin' | 'student' | 'parent';
-
-
-// Multi-admin storage system
 export class AdminStorage {
-  ensureDemoAdmins(): void {
-    if (typeof window === 'undefined') return;
-
-    const ensureAdmin = (
-      username: string,
-      password: string,
-      fullName: string,
-      email: string
-    ) => {
-      const existing = this.getAdminByUsername(username);
-
-      if (!existing) {
-        this.createAdmin({ username, password, fullName, email });
-        return;
-      }
-
-      const updates: Partial<Admin> = {};
-      if (existing.password !== password) {
-        updates.password = password;
-      }
-      if (!existing.isActive) {
-        updates.isActive = true;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        this.updateAdmin(existing.id, updates);
-      }
-    };
-
-    ensureAdmin('admin', 'admin123', 'Demo Administrator', 'admin@kevinsacademy.com');
-    ensureAdmin('kevin_teacher', 'kevin_0209', 'Kevin Teacher', 'kevin@kevinsacademy.com');
-
-    const admin = this.getAdminByUsername('admin');
-    if (!admin) return;
-
-    const studentKey = this.getAdminKey(admin.id, 'students');
-    const globalStudentsKey = 'kevins_academy_students';
-    const parentKey = this.getAdminKey(admin.id, 'parents');
-    const globalParentsKey = 'kevins_academy_parents';
-
-    const defaultStudent: Student = {
-      id: 'student_demo_1',
-      fullName: 'John Doe',
-      role: 'student',
-      password: 'student123',
-      username: 'student',
-      email: 'student@kevinsacademy.com',
-      phone: '+1 (555) 010-2000',
-      group: 'Beginner A1',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-    };
-
-    const defaultParent: Parent = {
-      id: 'parent_demo_1',
-      fullName: 'Jane Doe',
-      role: 'parent',
-      email: 'parent@kevinsacademy.com',
-      phone: '+1 (555) 010-3000',
-      username: 'parent',
-      password: 'parent123',
-      studentId: defaultStudent.id,
-      createdAt: new Date().toISOString(),
-    };
-
-    const ensureArrayItem = <T extends { username?: string }>(
-      key: string,
-      item: T
-    ) => {
-      const existingRaw = localStorage.getItem(key);
-      const list: T[] = existingRaw ? JSON.parse(existingRaw) : [];
-      const hasItem = list.some((entry) => entry.username === item.username);
-      if (!hasItem) {
-        list.push(item);
-        localStorage.setItem(key, JSON.stringify(list));
-      }
-    };
-
-    ensureArrayItem<Student>(studentKey, defaultStudent);
-    ensureArrayItem<Student>(globalStudentsKey, defaultStudent);
-    ensureArrayItem<Parent>(parentKey, defaultParent);
-    ensureArrayItem<Parent>(globalParentsKey, defaultParent);
-  }
-
-  private getAdminKey(adminId: string, key: string): string {
-    return `kevins_academy_${adminId}_${key}`;
-  }
-
-  private getCurrentAdmin(): Admin | null {
-    const currentAdmin = localStorage.getItem('kevins_academy_current_admin');
-    return currentAdmin ? JSON.parse(currentAdmin) : null;
-  }
-
-  private setCurrentAdmin(admin: Admin | null): void {
-    if (admin) {
-      localStorage.setItem('kevins_academy_current_admin', JSON.stringify(admin));
-    } else {
-      localStorage.removeItem('kevins_academy_current_admin');
+  // ADMIN MANAGEMENT
+  getAdmins = (): any[] => {
+    try {
+      const raw = localStorage.getItem('kevins_academy_admins');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error(e);
+      return [];
     }
-  }
+  };
 
-  // Admin management functions
-  createAdmin(adminData: Omit<Admin, 'id' | 'createdAt' | 'isActive'>): Admin {
+  getAdminByUsername = (username: string): any => {
     const admins = this.getAdmins();
-    const newAdmin: Admin = {
-      ...adminData,
-      role: 'admin',
-      id: `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      isActive: true,
-    };
+    return admins.find(a => a.username === username);
+  };
 
+  createAdmin = (data: any): any => {
+    const admins = this.getAdmins();
+    const newAdmin = { ...data, id: `admin_${Date.now()}`, createdAt: new Date().toISOString() };
     admins.push(newAdmin);
     localStorage.setItem('kevins_academy_admins', JSON.stringify(admins));
-
     return newAdmin;
-  }
+  };
 
-  getAdmins(): Admin[] {
-    const admins = localStorage.getItem('kevins_academy_admins');
-    return admins ? JSON.parse(admins) : [];
-  }
-
-  getAdminById(id: string): Admin | null {
+  updateAdmin = (id: string, data: any): void => {
     const admins = this.getAdmins();
-    return admins.find(admin => admin.id === id) || null;
-  }
-
-  getAdminByUsername(username: string): Admin | null {
-    const admins = this.getAdmins();
-    return admins.find(admin => admin.username === username) || null;
-  }
-
-  updateAdmin(id: string, updates: Partial<Admin>): Admin | null {
-    const admins = this.getAdmins();
-    const adminIndex = admins.findIndex(admin => admin.id === id);
-
-    if (adminIndex === -1) return null;
-
-    admins[adminIndex] = { ...admins[adminIndex], ...updates };
-    localStorage.setItem('kevins_academy_admins', JSON.stringify(admins));
-
-    // Update current admin if it's the same admin
-    const currentAdmin = this.getCurrentAdmin();
-    if (currentAdmin && currentAdmin.id === id) {
-      this.setCurrentAdmin(admins[adminIndex]);
+    const idx = admins.findIndex(a => a.id === id);
+    if (idx !== -1) {
+      admins[idx] = { ...admins[idx], ...data };
+      localStorage.setItem('kevins_academy_admins', JSON.stringify(admins));
     }
+  };
 
-    return admins[adminIndex];
-  }
+  // 1. O'QUVCHILARNI OLISH (localStorage-backed)
+  getStudents = (): Student[] => {
+    try {
+      const raw = localStorage.getItem('kevins_academy_students');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { console.error(e); return []; }
+  };
 
-  deleteAdmin(id: string): boolean {
-    const admins = this.getAdmins();
-    const filteredAdmins = admins.filter(admin => admin.id !== id);
+  // 2. YANGI O'QUVCHI QO'SHISH (localStorage)
+  addStudent = (data: any): Student => {
+    const students = this.getStudents();
+    const newStudent = { ...data, id: `student_${Date.now()}` };
+    students.push(newStudent);
+    localStorage.setItem('kevins_academy_students', JSON.stringify(students));
+    return newStudent;
+  };
 
-    if (filteredAdmins.length === admins.length) return false;
+  // 3. O'CHIRISH
+  deleteStudent = (id: string): void => {
+    const students = this.getStudents().filter(s => s.id !== id);
+    localStorage.setItem('kevins_academy_students', JSON.stringify(students));
+  };
 
-    localStorage.setItem('kevins_academy_admins', JSON.stringify(filteredAdmins));
-
-    // O'chirilgan adminning barcha ma'lumotlarini ham o'chirish
-    const adminKeys = [
-      'students', 'groups', 'materials', 'scores',
-      'attendance', 'payments', 'parents'
-    ];
-
-    adminKeys.forEach(key => {
-      const adminKey = this.getAdminKey(id, key);
-      localStorage.removeItem(adminKey);
-    });
-
-    // Clear current admin if it's the deleted admin
-    const currentAdmin = this.getCurrentAdmin();
-    if (currentAdmin && currentAdmin.id === id) {
-      this.setCurrentAdmin(null);
+  // 4. TAHRIRLASH (UPDATE)
+  updateStudent = (id: string, data: any): void => {
+    const students = this.getStudents();
+    const idx = students.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      students[idx] = { ...students[idx], ...data };
+      localStorage.setItem('kevins_academy_students', JSON.stringify(students));
     }
+  };
 
-    return true;
-  }
+  // GURUHLARNI OLISH (Vaqtinchalik mock yoki API)
+  getGroups = (): Group[] => {
+    try {
+      const raw = localStorage.getItem('kevins_academy_groups');
+      if (raw) return JSON.parse(raw);
+      return [
+        { id: '1', name: 'Beginner A1' },
+        { id: '2', name: 'Intermediate B1' }
+      ];
+    } catch (e) { return []; }
+  };
 
-  // Authentication functions
-  authenticateAdmin(username: string, password: string): Admin | null {
-    const admin = this.getAdminByUsername(username);
-    if (admin && admin.password === password && admin.isActive) {
-      this.setCurrentAdmin(admin);
-      return admin;
-    }
-    return null;
-  }
+  // Save groups to localStorage
+  saveGroups = (groups: Group[]) => {
+    try {
+      localStorage.setItem('kevins_academy_groups', JSON.stringify(groups));
+    } catch (e) { console.error(e); }
+  };
 
-  logoutAdmin(): void {
-    this.setCurrentAdmin(null);
-  }
+  saveStudents = (students: Student[]) => {
+    try { localStorage.setItem('kevins_academy_students', JSON.stringify(students)); } catch (e) { console.error(e); }
+  };
 
-  getCurrentAdminData(): Admin | null {
-    return this.getCurrentAdmin();
-  }
+  // Parents
+  getParents = (): Parent[] => {
+    try { const raw = localStorage.getItem('kevins_academy_parents'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  };
+  saveParents = (parents: Parent[]) => { try { localStorage.setItem('kevins_academy_parents', JSON.stringify(parents)); } catch (e) { console.error(e); } };
 
-  // Data storage functions with admin namespace
-  saveData(key: string, data: any): void {
-    const currentAdmin = this.getCurrentAdmin();
-    if (!currentAdmin) {
-      throw new Error('No admin logged in');
-    }
+  // Payments / Attendance generic storage
+  getPayments = (): Payment[] => {
+    try { const raw = localStorage.getItem('kevins_academy_payments'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  };
+  savePayments = (payments: Payment[]) => { localStorage.setItem('kevins_academy_payments', JSON.stringify(payments)); };
 
-    const adminKey = this.getAdminKey(currentAdmin.id, key);
-    localStorage.setItem(adminKey, JSON.stringify(data));
-  }
+  getAttendance = (): Attendance[] => {
+    try { const raw = localStorage.getItem('kevins_academy_attendance'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  };
+  saveAttendance = (attendance: Attendance[]) => { localStorage.setItem('kevins_academy_attendance', JSON.stringify(attendance)); };
 
-  getData(key: string): any {
-    const currentAdmin = this.getCurrentAdmin();
-    if (!currentAdmin) {
-      throw new Error('No admin logged in');
-    }
+  // Generic data per-admin type (students, parents, materials, scores, etc.)
+  getDataForAdmin = (adminId: string, type: string): any[] => {
+    try {
+      const raw = localStorage.getItem(`kevins_academy_${type}`);
+      const all = raw ? JSON.parse(raw) : [];
+      return all.filter((it: any) => it.adminId === adminId || it.adminId == null);
+    } catch (e) { return []; }
+  };
+  saveDataForType = (type: string, data: any[]) => {
+    try { localStorage.setItem(`kevins_academy_${type}`, JSON.stringify(data)); } catch (e) { console.error(e); }
+  };
 
-    const adminKey = this.getAdminKey(currentAdmin.id, key);
-    const data = localStorage.getItem(adminKey);
-    return data ? JSON.parse(data) : null;
-  }
+  // Materials convenience
+  getMaterials = (): Material[] => {
+    try { const raw = localStorage.getItem('kevins_academy_materials'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  };
+  saveMaterials = (materials: Material[]) => { try { localStorage.setItem('kevins_academy_materials', JSON.stringify(materials)); } catch (e) { console.error(e); } };
 
-  updateData(key: string, updateFn: (data: any) => any): any {
-    const currentData = this.getData(key);
-    const updatedData = updateFn(currentData);
-    this.saveData(key, updatedData);
-    return updatedData;
-  }
+  // Scores convenience
+  getScores = (): Score[] => {
+    try { const raw = localStorage.getItem('kevins_academy_scores'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  };
+  saveScores = (scores: Score[]) => { try { localStorage.setItem('kevins_academy_scores', JSON.stringify(scores)); } catch (e) { console.error(e); } };
 
-  deleteData(key: string): void {
-    const currentAdmin = this.getCurrentAdmin();
-    if (!currentAdmin) {
-      throw new Error('No admin logged in');
-    }
-
-    const adminKey = this.getAdminKey(currentAdmin.id, key);
-    localStorage.removeItem(adminKey);
-  }
-
-  /**
-   * Read namespaced data for a specific admin without requiring them to be the current admin.
-   * This is safe for read-only access from public (student) flows.
-   */
-  getDataForAdmin(adminId: string, key: string): any {
-    const adminKey = this.getAdminKey(adminId, key);
-    const data = localStorage.getItem(adminKey);
-    return data ? JSON.parse(data) : null;
-  }
-
-  /**
-   * Find a student across all admins by credentials without mutating current admin context.
-   */
-  findStudentByCredentials(
-    username: string,
-    password: string
-  ): { status: 'not_found' | 'inactive' | 'match'; student: Student | null; adminId: string | null } {
-    const admins = this.getAdmins();
-    let lastInactive: { student: Student; adminId: string } | null = null;
-
-    for (const admin of admins) {
-      const students: Student[] = this.getDataForAdmin(admin.id, 'students') || [];
-      const match = students.find(s => s.username === username);
-      if (!match) continue;
-
-      if (match.password !== password) {
-        continue;
-      }
-
-      if (match.status === 'inactive') {
-        lastInactive = { student: match, adminId: admin.id };
-        continue;
-      }
-
-      return { status: 'match', student: match, adminId: admin.id };
-    }
-
-    if (lastInactive) {
-      return { status: 'inactive', student: lastInactive.student, adminId: lastInactive.adminId };
-    }
-
-    return { status: 'not_found', student: null, adminId: null };
-  }
-
-  // Convenience methods for common data types
-  getStudents(): Student[] {
-    return this.getData('students') || [];
-  }
-
-  saveStudents(students: Student[]): void {
-    const normalized = students.map(student => ({
-      ...student,
-      role: 'student',
-    }));
-    this.saveData('students', normalized);
-  }
-
-  getGroups(): Group[] {
-    return this.getData('groups') || [];
-  }
-
-  saveGroups(groups: Group[]): void {
-    this.saveData('groups', groups);
-  }
-
-  getMaterials(): Material[] {
-    return this.getData('materials') || [];
-  }
-
-  saveMaterials(materials: Material[]): void {
-    this.saveData('materials', materials);
-  }
-
-  getScores(): Score[] {
-    return this.getData('scores') || [];
-  }
-
-  saveScores(scores: Score[]): void {
-    this.saveData('scores', scores);
-  }
-
-  getAttendance(): Attendance[] {
-    return this.getData('attendance') || [];
-  }
-
-  saveAttendance(attendance: Attendance[]): void {
-    this.saveData('attendance', attendance);
-  }
-
-  getPayments(): Payment[] {
-    return this.getData('payments') || [];
-  }
-
-  savePayments(payments: Payment[]): void {
-    this.saveData('payments', payments);
-  }
-
-  getParents(): Parent[] {
-    return this.getData('parents') || [];
-  }
-
-  saveParents(parents: Parent[]): void {
-    const normalized = parents.map(parent => ({
-      ...parent,
-      role: 'parent',
-    }));
-    this.saveData('parents', normalized);
-  }
-
-  /**
-   * Find a parent across all admins by credentials without mutating current admin context.
-   */
-  findParentByCredentials(
-    username: string,
-    password: string
-  ): { status: 'not_found' | 'match'; parent: Parent | null; adminId: string | null } {
-    const admins = this.getAdmins();
-
-    for (const admin of admins) {
-      const parents: Parent[] = this.getDataForAdmin(admin.id, 'parents') || [];
-      const match = parents.find(p => p.username === username);
-      if (!match) continue;
-
-      if (match.password !== password) {
-        continue;
-      }
-
-      return { status: 'match', parent: match, adminId: admin.id };
-    }
-
-    return { status: 'not_found', parent: null, adminId: null };
-  }
+  // Admin management helpers
+  deleteAdmin = (id: string) => {
+    try {
+      const raw = localStorage.getItem('kevins_academy_admins');
+      const admins = raw ? JSON.parse(raw) : [];
+      const filtered = admins.filter((a: any) => a.id !== id);
+      localStorage.setItem('kevins_academy_admins', JSON.stringify(filtered));
+    } catch (e) { console.error(e); }
+  };
 }
 
-// Export singleton instance
 export const adminStorage = new AdminStorage();
+
+// export individual helpers here as well to keep the API consistent with the
+// full project version (and to avoid any undefined method problems if other
+// code accidentally pulls in the root storage).
+// simple wrappers; arguments are explicit so we avoid spread/tuple errors
+export const getAdmins = () => adminStorage.getAdmins();
+export const getAdminByUsername = (username: string) =>
+  // @ts-ignore - stub may not implement this yet
+  (adminStorage as any).getAdminByUsername?.(username);
+export const createAdmin = (data: any) =>
+  (adminStorage as any).createAdmin?.(data);
+export const updateAdmin = (id: string, data: any) =>
+  (adminStorage as any).updateAdmin?.(id, data);
+
+// groups / students / payments wrappers
+export const getGroups = () => (adminStorage as any).getGroups?.();
+export const saveGroups = (groups: Group[]) => (adminStorage as any).saveGroups?.(groups);
+export const getStudents = () => (adminStorage as any).getStudents?.();
+export const addStudent = (data: any) => (adminStorage as any).addStudent?.(data);
+export const updateStudent = (id: string, data: any) => (adminStorage as any).updateStudent?.(id, data);
+export const deleteStudent = (id: string) => (adminStorage as any).deleteStudent?.(id);
+export const saveStudents = (students: Student[]) => (adminStorage as any).saveStudents?.(students);
+
+export const getPayments = () => (adminStorage as any).getPayments?.();
+export const savePayments = (payments: Payment[]) => (adminStorage as any).savePayments?.(payments);
+export const getAttendance = () => (adminStorage as any).getAttendance?.();
+export const saveAttendance = (attendance: Attendance[]) => (adminStorage as any).saveAttendance?.(attendance);
+
+export const getDataForAdmin = (adminId: string, type: string) => (adminStorage as any).getDataForAdmin?.(adminId, type);
+export const saveDataForType = (type: string, data: any[]) => (adminStorage as any).saveDataForType?.(type, data);
+export const getMaterials = () => (adminStorage as any).getMaterials?.();
+export const saveMaterials = (materials: any[]) => (adminStorage as any).saveMaterials?.(materials);
+export const getScores = () => (adminStorage as any).getScores?.();
+export const saveScores = (scores: any[]) => (adminStorage as any).saveScores?.(scores);
+export const deleteAdmin = (id: string) => (adminStorage as any).deleteAdmin?.(id);
+export const getParents = () => (adminStorage as any).getParents?.();
+export const saveParents = (parents: any[]) => (adminStorage as any).saveParents?.(parents);

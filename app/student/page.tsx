@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { adminStorage } from '@/lib/storage';
+import { getDataForAdmin } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 import { BookOpen, BarChart3, LogOut, GraduationCap, AlertCircle } from 'lucide-react';
 
@@ -69,7 +69,7 @@ export default function StudentDashboard() {
     if (!student?.adminId) return;
 
     const adminId = student.adminId;
-    const allScores = adminStorage.getDataForAdmin(adminId, 'scores') || [];
+    const allScores = getDataForAdmin(adminId, 'scores') || [];
     const studentScores = allScores.filter((s: any) => s.studentName === student.fullName);
     setScores(studentScores);
 

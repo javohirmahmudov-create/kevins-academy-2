@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, CheckCircle, XCircle, Clock, User } from 'lucide-react';
-import { adminStorage, Attendance } from '@/lib/storage';
+import { getAttendance, saveAttendance, getStudents, Attendance } from '@/lib/storage';
 
 export default function AttendancePage() {
   const router = useRouter();
@@ -13,8 +13,8 @@ export default function AttendancePage() {
   const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
-    setAttendance(adminStorage.getAttendance());
-    setStudents(adminStorage.getStudents());
+    setAttendance(getAttendance());
+    setStudents(getStudents());
   }, []);
   const [formData, setFormData] = useState<{
     studentName: string;
@@ -27,8 +27,8 @@ export default function AttendancePage() {
   });
 
   useEffect(() => {
-    setAttendance(adminStorage.getAttendance());
-    setStudents(adminStorage.getStudents());
+    setAttendance(getAttendance());
+    setStudents(getStudents());
   }, []);
 
   const handleMarkAttendance = () => {
@@ -37,7 +37,7 @@ export default function AttendancePage() {
       return;
     }
 
-    const attendanceRecords = adminStorage.getAttendance();
+    const attendanceRecords = getAttendance();
     const newAttendance: Attendance = {
       id: `attendance_${Date.now()}`,
       studentName: formData.studentName,
@@ -46,8 +46,8 @@ export default function AttendancePage() {
       group: 'Not Assigned'
     };
 
-    adminStorage.saveAttendance([...attendanceRecords, newAttendance]);
-    setAttendance(adminStorage.getAttendance());
+    saveAttendance([...attendanceRecords, newAttendance]);
+    setAttendance(getAttendance());
     setFormData({ studentName: '', date: new Date().toISOString().split('T')[0], status: 'present' });
     setShowMarkModal(false);
   };
@@ -123,7 +123,7 @@ export default function AttendancePage() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <button onClick={() => { adminStorage.saveAttendance(adminStorage.getAttendance().filter(a => a.id !== record.id)); setAttendance(adminStorage.getAttendance()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
+                      <button onClick={() => { saveAttendance(getAttendance().filter(a => a.id !== record.id)); setAttendance(getAttendance()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
                     </td>
                   </motion.tr>
                 ))}

@@ -1,32 +1,23 @@
-// Demo admin yaratish scripti
-// Bu script bir marta ishga tushiriladi va demo adminlarni yaratadi
+import { getAdmins, createAdmin, updateAdmin } from '../lib/storage';
 
-import { adminStorage } from '../lib/storage';
-
-// Demo admin yaratish
 const createDemoAdmin = () => {
   try {
-    // Avval adminlar ro'yxatini tekshirish
-    const existingAdmins = adminStorage.getAdmins();
+    // 🛡️ XAVFSIZLIK: Turbopack metodni yuklab ulgurmagan bo'lsa, kutib turamiz
+    if (typeof getAdmins !== 'function') {
+      console.warn('⚠️ storage helpers hali yuklanmadi, 500ms dan keyin qayta uriniladi...');
+      setTimeout(createDemoAdmin, 500);
+      return null;
+    }
 
-    // Agar admin yo'q bo'lsa yoki eski parol bilan bo'lsa, yaratish/yangilash
+    const existingAdmins = getAdmins() || [];
+
+    // Adminlarni qidirish
     let demoAdmin = existingAdmins.find(admin => admin.username === 'admin');
     let kevinAdmin = existingAdmins.find(admin => admin.username === 'kevin_teacher');
 
-    // Admin parollarini tekshirish va yangilash
-    if (demoAdmin && demoAdmin.password !== 'admin123') {
-      adminStorage.updateAdmin(demoAdmin.id, { password: 'admin123' });
-      demoAdmin = adminStorage.getAdminByUsername('admin') || demoAdmin;
-    }
-
-    if (kevinAdmin && kevinAdmin.password !== 'kevin_0209') {
-      adminStorage.updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
-      kevinAdmin = adminStorage.getAdminByUsername('kevin_teacher') || kevinAdmin;
-    }
-
-    // Agar adminlar umuman yo'q bo'lsa, yaratish
+    // 1. Demo Admin yaratish/yangilash
     if (!demoAdmin) {
-      demoAdmin = adminStorage.createAdmin({
+      createAdmin({
         username: 'admin',
         password: 'admin123',
         fullName: 'Demo Administrator',
@@ -34,29 +25,35 @@ const createDemoAdmin = () => {
       });
     }
 
+    // 2. Kevin Teacher yaratish/yangilash
     if (!kevinAdmin) {
-      kevinAdmin = adminStorage.createAdmin({
+      createAdmin({
         username: 'kevin_teacher',
         password: 'kevin_0209',
         fullName: 'Kevin Teacher',
         email: 'kevin@kevinsacademy.com'
       });
+    } else if (kevinAdmin.password !== 'kevin_0209') {
+      // Agar parol eski bo'lsa yangilab qo'yamiz
+      updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
     }
 
-    console.log('Demo admins ready!');
-    console.log('Current Kevin admin password:', kevinAdmin?.password);
-
-    return { demoAdmin, kevinAdmin };
+    console.log('✅ Demo admins ready!');
+    return { success: true };
   } catch (error) {
-    console.error('Error setting up demo admins:', error);
+    console.error('❌ Error setting up demo admins:', error);
     return null;
   }
 };
 
-// Agar bu script browserda ishga tushsa
+// Faqat brauzerda va xavfsiz kechikish bilan ishga tushiramiz
 if (typeof window !== 'undefined') {
-  createDemoAdmin();
+  // Sahifa to'liq yuklangandan keyin ishga tushishi uchun
+  if (document.readyState === 'complete') {
+    createDemoAdmin();
+  } else {
+    window.addEventListener('load', createDemoAdmin);
+  }
 }
 
-// Export for manual execution if needed
 export { createDemoAdmin };

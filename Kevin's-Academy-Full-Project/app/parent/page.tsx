@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeLanguageToggle } from '@/components/theme-language-toggle';
 import { useApp } from '@/lib/app-context';
-import { adminStorage, Student, Score, Attendance, Payment, Parent } from '@/lib/storage';
+import { getDataForAdmin, Student, Score, Attendance, Payment, Parent } from '@/lib/storage';
 import {
   User,
   Calendar,
@@ -56,10 +56,10 @@ export default function ParentDashboard() {
     setError(null);
 
     try {
-      const parents = (adminStorage.getDataForAdmin(sessionParent.adminId, 'parents') as Parent[] | null) || [];
+      const parents = (getDataForAdmin(sessionParent.adminId, 'parents') as Parent[] | null) || []; 
       const parentRecord = parents.find(p => p.id === sessionParent.id) || sessionParent;
 
-      const students = (adminStorage.getDataForAdmin(sessionParent.adminId, 'students') as Student[] | null) || [];
+      const students = (getDataForAdmin(sessionParent.adminId, 'students') as Student[] | null) || []; 
       const child = students.find(s => s.id === parentRecord.studentId);
 
       if (!child) {
@@ -70,13 +70,13 @@ export default function ParentDashboard() {
         return;
       }
 
-      const scores = (adminStorage.getDataForAdmin(sessionParent.adminId, 'scores') as Score[] | null) || [];
+      const scores = (getDataForAdmin(sessionParent.adminId, 'scores') as Score[] | null) || []; 
       const childScores = scores.filter(score => score.studentName === child.fullName);
 
-      const attendance = (adminStorage.getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || [];
+      const attendance = (getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || []; 
       const childAttendance = attendance.filter(record => record.studentName === child.fullName);
 
-      const payments = (adminStorage.getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || [];
+      const payments = (getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || []; 
       const childPayments = payments.filter(payment => payment.studentName === child.fullName);
       const latestPayment = childPayments[childPayments.length - 1];
 

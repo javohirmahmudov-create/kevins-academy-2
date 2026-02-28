@@ -14,7 +14,7 @@ import {
   Phone,
   GraduationCap
 } from 'lucide-react';
-import { adminStorage, Student } from '@/lib/storage';
+import { getStudents, getGroups, saveStudents, Student } from '@/lib/storage';
 
 export default function StudentsPage() {
   const router = useRouter();
@@ -36,8 +36,8 @@ export default function StudentsPage() {
 
   // Load students from localStorage on mount
   useEffect(() => {
-    setStudents(adminStorage.getStudents());
-    setGroups(adminStorage.getGroups());
+    setStudents(getStudents());
+    setGroups(getGroups());
   }, []);
 
   const handleAddStudent = () => {
@@ -46,7 +46,7 @@ export default function StudentsPage() {
       return;
     }
 
-    const currentStudents = adminStorage.getStudents();
+    const currentStudents = getStudents();
     const newStudent: Student = {
       id: `student_${Date.now()}`,
       fullName: formData.fullName,
@@ -59,8 +59,8 @@ export default function StudentsPage() {
       password: formData.password
     };
 
-    adminStorage.saveStudents([...currentStudents, newStudent]);
-    setStudents(adminStorage.getStudents());
+    saveStudents([...currentStudents, newStudent]);
+    setStudents(getStudents());
     setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
     setShowAddModal(false);
   };
@@ -97,15 +97,15 @@ export default function StudentsPage() {
       updateData.password = formData.password;
     }
 
-    const students = adminStorage.getStudents();
+    const students = getStudents();
     const updatedStudents = students.map(student =>
       student.id === editingStudent.id
         ? { ...student, ...updateData }
         : student
     );
-    adminStorage.saveStudents(updatedStudents);
+    saveStudents(updatedStudents);
 
-    setStudents(adminStorage.getStudents());
+    setStudents(getStudents());
     setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
     setEditingStudent(null);
     setShowEditModal(false);
@@ -113,11 +113,11 @@ export default function StudentsPage() {
 
   const handleDeleteStudent = (id: string) => {
     if (confirm('Are you sure you want to delete this student?')) {
-    const students = adminStorage.getStudents();
+    const students = getStudents();
     const filteredStudents = students.filter(student => student.id !== id);
-    adminStorage.saveStudents(filteredStudents);
+    saveStudents(filteredStudents);
 
-    setStudents(adminStorage.getStudents());
+    setStudents(getStudents());
     }
   };
 

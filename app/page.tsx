@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { GraduationCap, Lock, User, Users, UserCircle } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
-import { adminStorage } from '@/lib/storage';
+import { getAdmins, createAdmin, getAdminByUsername, updateAdmin } from '@/lib/storage';
 
 // Demo admin yaratish uchun import
-import '@/scripts/create-demo-admin';
+// import '@/scripts/create-demo-admin';
 
 export default function Home() {
   const router = useRouter();
@@ -30,36 +30,18 @@ export default function Home() {
   const [error, setError] = useState('');
 
   // Demo admin yaratish
+// Demo admin yaratish
   useEffect(() => {
     try {
-      console.log('🔄 Setting up demo admins...');
-      const existingAdmins = adminStorage.getAdmins();
-      console.log('📋 Existing admins:', existingAdmins.length);
+      if (typeof getAdmins !== 'function') return;
 
-      // Agar admin yo'q bo'lsa yoki eski parol bilan bo'lsa, yaratish/yangilash
-      let demoAdmin = existingAdmins.find(admin => admin.username === 'admin');
-      let kevinAdmin = existingAdmins.find(admin => admin.username === 'kevin_teacher');
+      const existingAdmins = getAdmins();
+      const demoAdmin = existingAdmins.find(admin => admin.username === 'admin');
+      const kevinAdmin = existingAdmins.find(admin => admin.username === 'kevin_teacher');
 
-      console.log('👤 Demo admin found:', !!demoAdmin);
-      console.log('👨‍🏫 Kevin admin found:', !!kevinAdmin);
-
-      // Admin parollarini tekshirish va yangilash
-      if (demoAdmin && demoAdmin.password !== 'admin123') {
-        console.log('🔐 Updating demo admin password...');
-        adminStorage.updateAdmin(demoAdmin.id, { password: 'admin123' });
-        demoAdmin = adminStorage.getAdminByUsername('admin') || demoAdmin;
-      }
-
-      if (kevinAdmin && kevinAdmin.password !== 'kevin_0209') {
-        console.log('🔐 Updating kevin admin password...');
-        adminStorage.updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
-        kevinAdmin = adminStorage.getAdminByUsername('kevin_teacher') || kevinAdmin;
-      }
-
-      // Agar adminlar umuman yo'q bo'lsa, yaratish
+      // Faqat adminlar yo'q bo'lsa yaratamiz (Dizayn to'lib turishi uchun)
       if (!demoAdmin) {
-        console.log('➕ Creating demo admin...');
-        demoAdmin = adminStorage.createAdmin({
+        createAdmin({
           username: 'admin',
           password: 'admin123',
           fullName: 'Demo Administrator',
@@ -68,18 +50,17 @@ export default function Home() {
       }
 
       if (!kevinAdmin) {
-        console.log('➕ Creating kevin admin...');
-        kevinAdmin = adminStorage.createAdmin({
+        createAdmin({
           username: 'kevin_teacher',
           password: 'kevin_0209',
           fullName: 'Kevin Teacher',
           email: 'kevin@kevinsacademy.com'
         });
+      } else if (kevinAdmin.password !== 'kevin_0209') {
+        updateAdmin(kevinAdmin.id, { password: 'kevin_0209' });
       }
 
       console.log('✅ Demo admins ready!');
-      console.log('📊 Final admin count:', adminStorage.getAdmins().length);
-      console.log('🔑 Current Kevin admin password:', kevinAdmin?.password);
     } catch (error) {
       console.error('❌ Error setting up demo admins:', error);
     }

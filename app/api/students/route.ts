@@ -31,3 +31,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Saqlashda xatolik' }, { status: 500 })
   }
 }
+
+// app/api/students/route.ts ichiga qo'shimcha:
+
+// O'CHIRISH (DELETE)
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 });
+
+  await prisma.student.delete({
+    where: { id: parseInt(id) }
+  });
+  return NextResponse.json({ success: true });
+}
+
+// TAHRIRLASH (PUT)
+export async function PUT(req: Request) {
+  const body = await req.json();
+  const { id, ...updateData } = body;
+
+  const updated = await prisma.student.update({
+    where: { id: parseInt(id) },
+    data: {
+      name: updateData.fullName,
+      email: updateData.email,
+      phone: updateData.phone,
+      groupName: updateData.group,
+      username: updateData.username,
+      // Faqat parol yuborilsa yangilaymiz
+      ...(updateData.password && { password: updateData.password })
+    }
+  });
+  return NextResponse.json(updated);
+}

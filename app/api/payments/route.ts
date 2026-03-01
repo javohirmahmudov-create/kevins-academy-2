@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
+import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -149,6 +150,7 @@ export async function POST(request: Request) {
 
       if (status === 'paid') {
         const text = `💳 <b>To'lov holati</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
+        const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}.`
         queueTelegramTask(async () => {
           await notifyParentsByStudentId({
             adminId,
@@ -158,8 +160,16 @@ export async function POST(request: Request) {
             buttonUrl,
           })
         })
+        queueSmsTask(async () => {
+          await notifyParentsByStudentIdSms({
+            adminId,
+            studentId,
+            text: smsText,
+          })
+        })
       } else if (isDueSoon(status, endDate || dueDate)) {
         const text = `⏰ <b>To'lov eslatmasi</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
+        const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}.`
         queueTelegramTask(async () => {
           await notifyParentsByStudentId({
             adminId,
@@ -167,6 +177,13 @@ export async function POST(request: Request) {
             text,
             buttonText: "Batafsil ko'rish",
             buttonUrl,
+          })
+        })
+        queueSmsTask(async () => {
+          await notifyParentsByStudentIdSms({
+            adminId,
+            studentId,
+            text: smsText,
           })
         })
       }
@@ -234,6 +251,7 @@ export async function PUT(request: Request) {
 
       if (payment.status === 'paid') {
         const text = `✅ <b>To'lov qabul qilindi</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
+        const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}.`
         queueTelegramTask(async () => {
           await notifyParentsByStudentId({
             adminId,
@@ -243,8 +261,16 @@ export async function PUT(request: Request) {
             buttonUrl,
           })
         })
+        queueSmsTask(async () => {
+          await notifyParentsByStudentIdSms({
+            adminId,
+            studentId: payment.studentId,
+            text: smsText,
+          })
+        })
       } else if (isDueSoon(payment.status, nextDueDate)) {
         const text = `🔔 <b>To'lov muddati yaqin</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
+        const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}.`
         queueTelegramTask(async () => {
           await notifyParentsByStudentId({
             adminId,
@@ -252,6 +278,13 @@ export async function PUT(request: Request) {
             text,
             buttonText: "Batafsil ko'rish",
             buttonUrl,
+          })
+        })
+        queueSmsTask(async () => {
+          await notifyParentsByStudentIdSms({
+            adminId,
+            studentId: payment.studentId,
+            text: smsText,
           })
         })
       }

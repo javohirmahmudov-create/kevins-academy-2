@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 import { buildParentPortalUrl, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
+import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
 
 type ScoreType = 'weekly' | 'mock'
 
@@ -261,6 +262,7 @@ export async function POST(request: Request) {
       const subject = body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment')
       const scoreValue = Number(overallPercent || 0)
       const text = `📊 <b>Yangi ball qo'shildi</b>\n\nFarzandingiz bugun <b>${subject}</b>dan <b>${scoreValue}%</b> ball (Level: <b>${level}</b>) oldi.\n🏅 Umumiy reytingi: <b>${rank || 0}-o'rin</b>.`
+      const smsText = `Kevin's Academy: ${subject} bo'yicha yangi ball ${scoreValue}%. Reyting: ${rank || 0}-o'rin.`
       const buttonUrl = buildParentPortalUrl()
 
       queueTelegramTask(async () => {
@@ -270,6 +272,14 @@ export async function POST(request: Request) {
           text,
           buttonText: "Batafsil ko'rish",
           buttonUrl,
+        })
+      })
+
+      queueSmsTask(async () => {
+        await notifyParentsByStudentIdSms({
+          adminId,
+          studentId,
+          text: smsText,
         })
       })
     }

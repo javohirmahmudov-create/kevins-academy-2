@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
+import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
 
 async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
   if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
       }
 
       const text = `${selected.emoji} <b>${selected.title}</b>\n\n${selected.text}\n\nHolat: <b>${selected.label}</b>.`
+      const smsText = `Kevin's Academy: ${studentName} uchun davomat yangilandi. Sana: ${dateText}. Holat: ${selected.label}.${note ? ` Izoh: ${note}.` : ''}`
       const buttonUrl = buildParentPortalUrl()
 
       queueTelegramTask(async () => {
@@ -108,6 +110,14 @@ export async function POST(request: Request) {
           text,
           buttonText: "Batafsil ko'rish",
           buttonUrl,
+        })
+      })
+
+      queueSmsTask(async () => {
+        await notifyParentsByStudentIdSms({
+          adminId,
+          studentId,
+          text: smsText,
         })
       })
     }

@@ -18,11 +18,13 @@ export default function MaterialsPage() {
     type: 'pdf' | 'video' | 'image' | 'text';
     group: string;
     dueDate: string;
+    content: string;
   }>({
     title: '',
     type: 'pdf',
     group: '',
-    dueDate: ''
+    dueDate: '',
+    content: ''
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -79,7 +81,7 @@ export default function MaterialsPage() {
           uploadedAt: new Date().toISOString(),
           uploadedBy: 'admin',
           fileUrl: blob.url,
-          content: null
+          content: formData.content || null
         })
       });
       if (!res.ok) {
@@ -94,7 +96,7 @@ export default function MaterialsPage() {
         new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
       );
       setMaterials(sortedMaterials);
-      setFormData({ title: '', type: 'pdf', group: '', dueDate: '' });
+      setFormData({ title: '', type: 'pdf', group: '', dueDate: '', content: '' });
       setSelectedFile(null);
       setShowAddModal(false);
       setUploading(false);
@@ -170,6 +172,11 @@ export default function MaterialsPage() {
                     <h3 className="text-lg font-bold text-gray-900 mb-2">{material.title}</h3>
                     <div className="space-y-2 mb-4">
                       <p className="text-sm text-gray-600">Group: {material.group}</p>
+                      {material.content && (
+                        <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2">
+                          {material.content}
+                        </p>
+                      )}
                       {material.dueDate && (
                         <p className="text-sm text-orange-600 font-medium">
                           Due: {new Date(material.dueDate).toLocaleDateString()}
@@ -303,13 +310,23 @@ export default function MaterialsPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">Deadline for students to complete this material</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Comment / Description</label>
+                <textarea
+                  value={formData.content}
+                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
+                  rows={3}
+                  placeholder="Material haqida qisqacha izoh yozing"
+                />
+              </div>
             </div>
             <div className="flex space-x-3 mt-6">
               <button 
                 onClick={() => {
                   setShowAddModal(false);
                   setSelectedFile(null);
-                  setFormData({ title: '', type: 'pdf', group: '', dueDate: '' });
+                  setFormData({ title: '', type: 'pdf', group: '', dueDate: '', content: '' });
                 }}
                 className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50"
                 disabled={uploading}

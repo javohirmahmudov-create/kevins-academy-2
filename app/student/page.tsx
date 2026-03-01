@@ -66,19 +66,34 @@ export default function StudentDashboard() {
   }, [currentStudent, router]);
 
   useEffect(() => {
-    if (!student?.adminId) return;
+    if (!student) return;
 
     (async () => {
       try {
-        const adminId = student.adminId;
-        const allScores = (await getDataForAdmin(adminId, 'scores')) || [];
-        const studentScores = allScores.filter((s: any) => s.studentName === student.fullName);
+        const allScores = (await getDataForAdmin('system', 'scores')) || [];
+        const studentScores = allScores.filter((s: any) =>
+          String(s.studentId || '') === String(student.id) ||
+          s.studentName === student.fullName
+        );
         setScores(studentScores);
 
         if (studentScores.length > 0) {
           const latest = studentScores[studentScores.length - 1];
+          if (typeof latest.value === 'number') {
+            setAverageScore(Math.round(latest.value));
+            setSkillBreakdown([
+              {
+                key: 'overall',
+                label: latest.subject ? `Subject: ${latest.subject}` : 'Overall',
+                score: Number(latest.value),
+              }
+            ]);
+            setLatestScoreDate(latest.createdAt || null);
+            return;
+          }
+
           const skills = Object.keys(latest).filter(key =>
-            !['id', 'studentName', 'createdAt'].includes(key) && typeof latest[key as keyof typeof latest] === 'number'
+            !['id', 'studentId', 'studentName', 'createdAt'].includes(key) && typeof latest[key as keyof typeof latest] === 'number'
           );
           const total = skills.reduce((sum, key) => sum + (latest[key as keyof typeof latest] || 0), 0);
           setAverageScore(skills.length > 0 ? Math.round(total / skills.length) : 0);

@@ -33,14 +33,18 @@ export default function StudentLessonsPage() {
   }, [currentStudent, router]);
 
   useEffect(() => {
-    if (!student?.adminId) return;
+    if (!student) return;
 
     (async () => {
       try {
-        const adminId = student.adminId;
-        const allMaterials = (await getDataForAdmin(adminId, 'materials')) || [];
+        const allMaterials = (await getDataForAdmin('system', 'materials')) || [];
+        const normalizedStudentGroup = String(student.group || '').trim().toLowerCase();
         const studentMaterials = allMaterials
-          .filter((m: any) => m.group === student.group)
+          .filter((m: any) => {
+            if (!normalizedStudentGroup) return true;
+            const materialGroup = String(m.group || '').trim().toLowerCase();
+            return materialGroup === normalizedStudentGroup;
+          })
           .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
         setMaterials(studentMaterials);
@@ -137,6 +141,11 @@ export default function StudentLessonsPage() {
                       <h3 className="text-lg font-bold text-gray-900 mb-2">{material.title}</h3>
                       <div className="space-y-2 mb-4">
                         <p className="text-sm text-gray-600 capitalize">Type: {typeLabelMap[type]}</p>
+                        {material.content && (
+                          <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2">
+                            {material.content}
+                          </p>
+                        )}
                         {material.dueDate && (
                           <p className="text-sm text-orange-600 font-medium">
                             Due: {new Date(material.dueDate).toLocaleDateString()}

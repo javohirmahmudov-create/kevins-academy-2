@@ -28,8 +28,9 @@ function extractScoreValueAndSubject(body: any) {
     }
   }
 
+  const parsed = body.value !== undefined ? Number(body.value) : null
   return {
-    value: body.value !== undefined ? Number(body.value) : null,
+    value: Number.isFinite(parsed as number) ? parsed : 0,
     subject: body.subject || 'overall'
   }
 }
@@ -37,7 +38,18 @@ function extractScoreValueAndSubject(body: any) {
 export async function GET() {
   try {
     const scores = await prisma.score.findMany({ orderBy: { createdAt: 'desc' } })
-    return NextResponse.json(Array.isArray(scores) ? scores : [])
+    if (!Array.isArray(scores) || scores.length === 0) {
+      return NextResponse.json([])
+    }
+
+    const students = await prisma.student.findMany({ select: { id: true, fullName: true } })
+    const studentMap = new Map(students.map((student) => [String(student.id), student.fullName]))
+    const mapped = scores.map((score) => ({
+      ...score,
+      studentName: score.studentId ? (studentMap.get(String(score.studentId)) || undefined) : undefined,
+    }))
+
+    return NextResponse.json(mapped)
   } catch (error) {
     return NextResponse.json([])
   }
@@ -55,7 +67,8 @@ export async function POST(request: Request) {
         subject: normalized.subject
       }
     })
-    return NextResponse.json(score)
+    const student = studentId ? await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } }) : null
+    return NextResponse.json({ ...score, studentName: student?.fullName })
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
   }
@@ -78,7 +91,8 @@ export async function PUT(request: Request) {
     }
 
     const score = await prisma.score.update({ where: { id }, data })
-    return NextResponse.json(score)
+    const student = score.studentId ? await prisma.student.findUnique({ where: { id: score.studentId }, select: { fullName: true } }) : null
+    return NextResponse.json({ ...score, studentName: student?.fullName })
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
   }

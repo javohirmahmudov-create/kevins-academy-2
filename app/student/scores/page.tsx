@@ -3,46 +3,62 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BarChart3, TrendingUp, Award } from 'lucide-react';
+import { ArrowLeft, BarChart3, Award } from 'lucide-react';
+import { getDataForAdmin } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 export default function StudentScoresPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const { currentStudent } = useApp();
+  const [student, setStudent] = useState<any>(null);
   const [scores, setScores] = useState<any[]>([]);
   const [averageScore, setAverageScore] = useState(0);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/');
+    if (currentStudent) {
+      setStudent(currentStudent);
       return;
     }
-    
-    const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'student') {
-      router.push('/');
+
+    const stored = localStorage.getItem('currentStudent');
+    if (!stored) {
+      router.replace('/');
       return;
     }
-    
-    setUser(parsedUser);
-    loadScores(parsedUser);
-  }, [router]);
 
-  const loadScores = (student: any) => {
-    const allScores = JSON.parse(localStorage.getItem('kevins_academy_scores') || '[]');
-    const studentScores = allScores.filter((s: any) => s.studentName === student.fullName);
-    setScores(studentScores);
-
-    // Calculate average
-    if (studentScores.length > 0) {
-      const latestScore = studentScores[studentScores.length - 1];
-      const skills = ['vocabulary', 'grammar', 'speaking', 'reading', 'writing', 'listening'];
-      const total = skills.reduce((sum, skill) => sum + (latestScore[skill] || 0), 0);
-      setAverageScore(Math.round(total / skills.length));
+    try {
+      setStudent(JSON.parse(stored));
+    } catch {
+      localStorage.removeItem('currentStudent');
+      router.replace('/');
     }
-  };
+  }, [currentStudent, router]);
 
-  if (!user) return null;
+  useEffect(() => {
+    if (!student) return;
+
+    (async () => {
+      const allScores = (await getDataForAdmin('system', 'scores')) || [];
+      const studentScores = allScores
+        .filter((score: any) =>
+          String(score.studentId || '') === String(student.id) ||
+          score.studentName === student.fullName
+        )
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      setScores(studentScores);
+
+      if (studentScores.length === 0) {
+        setAverageScore(0);
+        return;
+      }
+
+      const total = studentScores.reduce((sum: number, score: any) => sum + Number(score.value || 0), 0);
+      setAverageScore(Math.round(total / studentScores.length));
+    })();
+  }, [student]);
+
+  if (!student) return null;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600 bg-green-50';
@@ -74,7 +90,6 @@ export default function StudentScoresPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Average Score Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -106,36 +121,26 @@ export default function StudentScoresPage() {
                 transition={{ delay: index * 0.1 }}
                 className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100"
               >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-gray-900">Score Report</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">{score.subject || 'Overall Score'}</h3>
                   <span className="text-sm text-gray-500">
                     {new Date(score.createdAt || Date.now()).toLocaleDateString()}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {Object.keys(score)
-                    .filter(key => !['id', 'studentName', 'createdAt'].includes(key) && typeof score[key] === 'number' && score[key] > 0)
-                    .map((skill) => {
-                      const value = score[skill] || 0;
-                      const label = skill.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                      return (
-                        <div key={skill} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700">{label}</span>
-                            <span className={`text-sm font-bold px-2 py-1 rounded ${getScoreColor(value)}`}>
-                              {value}%
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${getProgressColor(value)}`}
-                              style={{ width: `${value}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Score</span>
+                    <span className={`text-sm font-bold px-2 py-1 rounded ${getScoreColor(Number(score.value || 0))}`}>
+                      {Number(score.value || 0)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full ${getProgressColor(Number(score.value || 0))}`}
+                      style={{ width: `${Number(score.value || 0)}%` }}
+                    />
+                  </div>
                 </div>
               </motion.div>
             ))}

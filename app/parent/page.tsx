@@ -97,8 +97,16 @@ export default function ParentDashboard() {
 
       if (childScores.length > 0) {
         const latestScore = childScores[childScores.length - 1];
+        if (typeof (latestScore as any).value === 'number') {
+          overallScore = Math.round(Number((latestScore as any).value));
+          skillBreakdown.push({
+            key: 'overall',
+            label: (latestScore as any).subject ? `Subject: ${(latestScore as any).subject}` : 'Overall',
+            score: overallScore,
+          });
+        } else {
         const scoreFields = Object.keys(latestScore).filter(key =>
-          !['id', 'studentName', 'createdAt'].includes(key) && typeof latestScore[key as keyof Score] === 'number'
+          !['id', 'studentId', 'studentName', 'createdAt'].includes(key) && typeof latestScore[key as keyof Score] === 'number'
         );
 
         const total = scoreFields.reduce((sum, field) => sum + Number(latestScore[field as keyof Score] || 0), 0);
@@ -116,21 +124,26 @@ export default function ParentDashboard() {
             }))
             .filter(skill => skill.score > 0)
         );
+        }
       }
 
       const activities: ActivityItem[] = [];
 
       childScores.slice(-3).reverse().forEach(score => {
-        const scoreFields = Object.keys(score).filter(key =>
-          !['id', 'studentName', 'createdAt'].includes(key) && typeof score[key as keyof Score] === 'number'
-        );
-        const average = scoreFields.length > 0
-          ? Math.round(scoreFields.reduce((sum, field) => sum + Number(score[field as keyof Score] || 0), 0) / scoreFields.length)
-          : 0;
+        const average = typeof (score as any).value === 'number'
+          ? Math.round(Number((score as any).value))
+          : (() => {
+              const scoreFields = Object.keys(score).filter(key =>
+                !['id', 'studentId', 'studentName', 'createdAt'].includes(key) && typeof score[key as keyof Score] === 'number'
+              );
+              return scoreFields.length > 0
+                ? Math.round(scoreFields.reduce((sum, field) => sum + Number(score[field as keyof Score] || 0), 0) / scoreFields.length)
+                : 0;
+            })();
         activities.push({
           type: 'score',
           title: 'Test Score Received',
-          description: `Average: ${average}%`,
+          description: `${(score as any).subject || 'Overall'}: ${average}%`,
           date: score.createdAt || new Date().toISOString(),
         });
       });

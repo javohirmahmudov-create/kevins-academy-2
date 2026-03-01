@@ -5,6 +5,7 @@ export type ParentAuthMetadata = {
   password?: string;
   studentId?: string;
   phone?: string;
+  telegramChatId?: string;
 };
 
 function toBase64(value: string) {
@@ -31,6 +32,7 @@ export function decodeParentMetadata(storedPhone?: string | null): ParentAuthMet
       password: typeof parsed.password === 'string' ? parsed.password : undefined,
       studentId: typeof parsed.studentId === 'string' ? parsed.studentId : undefined,
       phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
+      telegramChatId: typeof parsed.telegramChatId === 'string' ? parsed.telegramChatId : undefined,
     };
   } catch {
     return null;
@@ -43,6 +45,7 @@ export function encodeParentMetadata(metadata: ParentAuthMetadata): string {
     ...(metadata.password ? { password: metadata.password } : {}),
     ...(metadata.studentId ? { studentId: metadata.studentId } : {}),
     ...(metadata.phone ? { phone: metadata.phone } : {}),
+    ...(metadata.telegramChatId ? { telegramChatId: metadata.telegramChatId } : {}),
   };
   return `${PARENT_META_PREFIX}${toBase64(JSON.stringify(compact))}`;
 }
@@ -55,5 +58,6 @@ export function unpackParent(parent: any) {
     password: metadata?.password,
     studentId: metadata?.studentId,
     phone: metadata?.phone ?? parent?.phone ?? null,
+    telegramChatId: metadata?.telegramChatId,
   };
 }

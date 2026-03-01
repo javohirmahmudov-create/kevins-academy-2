@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
+import { buildParentPortalUrl, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
 
 type ScoreType = 'weekly' | 'mock'
 
@@ -98,6 +99,51 @@ function rankStudents(items: Array<{ studentId: number; studentName: string; sco
     }
     return { ...item, rank: currentRank }
   })
+}
+
+async function getStudentRankInGroup(input: {
+  adminId?: number | null
+  studentId?: number | null
+  group?: string | null
+  scoreType: ScoreType
+}) {
+  if (!input.studentId || !input.group) return 0
+
+  const students = await prisma.student.findMany({
+    where: {
+      ...(input.adminId ? { adminId: input.adminId } : {}),
+      group: input.group,
+    },
+    select: { id: true, fullName: true }
+  })
+
+  if (!students.length) return 0
+
+  const studentIds = students.map((student) => student.id)
+  const scoreRows = await prisma.score.findMany({
+    where: {
+      ...(input.adminId ? { adminId: input.adminId } : {}),
+      scoreType: input.scoreType,
+      studentId: { in: studentIds }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  const latestByStudent = new Map<number, number>()
+  for (const row of scoreRows) {
+    if (!row.studentId || latestByStudent.has(row.studentId)) continue
+    latestByStudent.set(row.studentId, Number(row.overallPercent ?? row.value ?? 0))
+  }
+
+  const ranked = rankStudents(
+    students.map((student) => ({
+      studentId: student.id,
+      studentName: student.fullName,
+      score: latestByStudent.get(student.id) ?? 0,
+    }))
+  )
+
+  return ranked.find((item) => item.studentId === input.studentId)?.rank || 0
 }
 
 export async function GET(request: Request) {
@@ -202,6 +248,32 @@ export async function POST(request: Request) {
       }
     })
     const student = studentId ? await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } }) : null
+
+    if (studentId) {
+      const studentWithGroup = await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true, group: true } })
+      const rank = await getStudentRankInGroup({
+        adminId,
+        studentId,
+        group: studentWithGroup?.group,
+        scoreType,
+      })
+
+      const subject = body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment')
+      const scoreValue = Number(overallPercent || 0)
+      const text = `📊 <b>Yangi ball qo'shildi</b>\n\nFarzandingiz bugun <b>${subject}</b>dan <b>${scoreValue}%</b> ball (Level: <b>${level}</b>) oldi.\n🏅 Umumiy reytingi: <b>${rank || 0}-o'rin</b>.`
+      const buttonUrl = buildParentPortalUrl()
+
+      queueTelegramTask(async () => {
+        await notifyParentsByStudentId({
+          adminId,
+          studentId,
+          text,
+          buttonText: "Batafsil ko'rish",
+          buttonUrl,
+        })
+      })
+    }
+
     return NextResponse.json({ ...score, studentName: student?.fullName })
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })

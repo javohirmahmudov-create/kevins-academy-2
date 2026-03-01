@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
+import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
 
 async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
   if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
@@ -64,6 +65,25 @@ export async function POST(request: Request) {
     }
 
     const attendance = await prisma.attendance.create({ data: data as any })
+
+    if (status === 'absent' && studentId) {
+      const student = await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } })
+      const studentName = student?.fullName || body.studentName || 'O\'quvchi'
+      const dateText = formatTelegramDate(parsedDate)
+      const text = `🚨 <b>Davomat ogohlantirishi</b>\n\nHurmatli ota-ona, farzandingiz <b>${studentName}</b> bugun <b>${dateText}</b> darsga qatnashmadi.`
+      const buttonUrl = buildParentPortalUrl()
+
+      queueTelegramTask(async () => {
+        await notifyParentsByStudentId({
+          adminId,
+          studentId,
+          text,
+          buttonText: "Batafsil ko'rish",
+          buttonUrl,
+        })
+      })
+    }
+
     return NextResponse.json(attendance)
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
@@ -75,12 +95,13 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const adminId = getAdminIdFromRequest(request)
     const id = String(body.id || '').trim()
+    const idNum = Number(id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
     if (adminId) {
-      const owned = await prisma.attendance.findFirst({ where: { id: Number(id), adminId } })
+      const owned = await prisma.attendance.findFirst({ where: { id: idNum, adminId } })
       if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
@@ -100,7 +121,7 @@ export async function PUT(request: Request) {
       ...(studentId ? { studentId } : {})
     }
 
-    const attendance = await prisma.attendance.update({ where: { id }, data: data as any })
+    const attendance = await prisma.attendance.update({ where: { id: idNum }, data: data as any })
     return NextResponse.json(attendance)
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })

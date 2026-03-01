@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
+import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -52,6 +53,16 @@ async function resolveStudentId(input: { studentId?: string | number; studentNam
   }
 
   return null
+}
+
+function isDueSoon(status?: string | null, dueDate?: Date | null) {
+  if (!dueDate) return false
+  if (status === 'paid') return false
+
+  const now = new Date()
+  const diffMs = dueDate.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffMs / DAY_MS)
+  return diffDays >= 0 && diffDays <= 3
 }
 
 export async function GET(request: Request) {
@@ -131,6 +142,36 @@ export async function POST(request: Request) {
         note: body.note || null
       }
     })
+
+    if (studentId) {
+      const buttonUrl = buildParentPortalUrl()
+      const nextDueText = formatTelegramDate(endDate || dueDate)
+
+      if (status === 'paid') {
+        const text = `💳 <b>To'lov holati</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
+        queueTelegramTask(async () => {
+          await notifyParentsByStudentId({
+            adminId,
+            studentId,
+            text,
+            buttonText: "Batafsil ko'rish",
+            buttonUrl,
+          })
+        })
+      } else if (isDueSoon(status, endDate || dueDate)) {
+        const text = `⏰ <b>To'lov eslatmasi</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
+        queueTelegramTask(async () => {
+          await notifyParentsByStudentId({
+            adminId,
+            studentId,
+            text,
+            buttonText: "Batafsil ko'rish",
+            buttonUrl,
+          })
+        })
+      }
+    }
+
     return NextResponse.json(payment)
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
@@ -185,6 +226,37 @@ export async function PUT(request: Request) {
     }
 
     const payment = await prisma.payment.update({ where: { id }, data })
+
+    if (payment.studentId) {
+      const buttonUrl = buildParentPortalUrl()
+      const nextDueDate = payment.endDate || payment.dueDate
+      const nextDueText = formatTelegramDate(nextDueDate)
+
+      if (payment.status === 'paid') {
+        const text = `✅ <b>To'lov qabul qilindi</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
+        queueTelegramTask(async () => {
+          await notifyParentsByStudentId({
+            adminId,
+            studentId: payment.studentId,
+            text,
+            buttonText: "Batafsil ko'rish",
+            buttonUrl,
+          })
+        })
+      } else if (isDueSoon(payment.status, nextDueDate)) {
+        const text = `🔔 <b>To'lov muddati yaqin</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
+        queueTelegramTask(async () => {
+          await notifyParentsByStudentId({
+            adminId,
+            studentId: payment.studentId,
+            text,
+            buttonText: "Batafsil ko'rish",
+            buttonUrl,
+          })
+        })
+      }
+    }
+
     return NextResponse.json(payment)
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })

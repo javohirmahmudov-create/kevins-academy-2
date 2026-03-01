@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
 import { getMaterials, getGroups, Material, Group } from '@/lib/storage';
+import { upload } from '@vercel/blob/client';
 
 export default function MaterialsPage() {
   const router = useRouter();
@@ -62,19 +63,24 @@ export default function MaterialsPage() {
     setUploading(true);
 
     try {
-      // prepare multipart form data for server upload
-      const form = new FormData();
-      form.append('title', formData.title);
-      form.append('type', formData.type);
-      form.append('group', formData.group);
-      form.append('dueDate', formData.dueDate);
-      if (selectedFile) {
-        form.append('file', selectedFile);
-      }
+      const blob = await upload(selectedFile.name, selectedFile, {
+        access: 'public',
+        handleUploadUrl: '/api/materials/upload'
+      });
 
       const res = await fetch('/api/materials', {
         method: 'POST',
-        body: form
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title,
+          fileType: formData.type,
+          group: formData.group,
+          dueDate: formData.dueDate || null,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: 'admin',
+          fileUrl: blob.url,
+          content: null
+        })
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));

@@ -60,7 +60,7 @@ export default function ParentDashboard() {
       const parentRecord = parents.find(p => p.id === sessionParent.id) || sessionParent;
 
       const students = (await getDataForAdmin(sessionParent.adminId, 'students') as Student[] | null) || [];
-      const child = students.find(s => s.id === parentRecord.studentId);
+      const child = students.find(s => String(s.id) === String(parentRecord.studentId));
 
       if (!child) {
         setChildSummary(null);
@@ -71,13 +71,22 @@ export default function ParentDashboard() {
       }
 
       const scores = (await getDataForAdmin(sessionParent.adminId, 'scores') as Score[] | null) || [];
-      const childScores = scores.filter(score => score.studentName === child.fullName);
+      const childScores = scores.filter(score =>
+        String((score as any).studentId || '') === String(child.id) ||
+        (score as any).studentName === child.fullName
+      );
 
       const attendance = (await getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || [];
-      const childAttendance = attendance.filter(record => record.studentName === child.fullName);
+      const childAttendance = attendance.filter(record =>
+        String((record as any).studentId || '') === String(child.id) ||
+        (record as any).studentName === child.fullName
+      );
 
       const payments = (await getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || [];
-      const childPayments = payments.filter(payment => payment.studentName === child.fullName);
+      const childPayments = payments.filter(payment =>
+        String((payment as any).studentId || '') === String(child.id) ||
+        (payment as any).studentName === child.fullName
+      );
       const latestPayment = childPayments[childPayments.length - 1];
 
       const attendedCount = childAttendance.filter(record => record.status === 'present' || record.status === 'late').length;
@@ -127,11 +136,14 @@ export default function ParentDashboard() {
       });
 
       childAttendance.slice(-3).reverse().forEach(record => {
+        const recordStatus = String(record.status || 'unknown');
+        const statusLabel = recordStatus.charAt(0).toUpperCase() + recordStatus.slice(1);
+        const recordDate = record.date || new Date().toISOString();
         activities.push({
           type: 'attendance',
           title: 'Attendance Marked',
-          description: `${record.status.charAt(0).toUpperCase() + record.status.slice(1)} - ${record.date}`,
-          date: record.date,
+          description: `${statusLabel} - ${recordDate}`,
+          date: recordDate,
         });
       });
 
@@ -206,8 +218,44 @@ export default function ParentDashboard() {
     return null;
   }
 
-  if (!parentSession || !childSummary) {
+  if (!parentSession) {
     return null;
+  }
+
+  if (!childSummary) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-slate-900 dark:via-red-900/20 dark:to-slate-900">
+        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin's Academy</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Parent Portal</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <LogOut className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
+        </header>
+
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="bg-white dark:bg-gray-800/80 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Parent account connected</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              {error || 'Child data not linked yet. Please ask admin to re-save this parent with the correct student.'}
+            </p>
+            <button
+              onClick={() => router.push('/')}
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg"
+            >
+              Back to Login
+            </button>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   const paymentIsPaid = childSummary.paymentStatus === 'paid';

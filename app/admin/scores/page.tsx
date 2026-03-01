@@ -3,9 +3,40 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, TrendingUp, User, Trash2 } from 'lucide-react';
-import { getScores, addScore, getStudents } from '@/lib/storage';
+import { ArrowLeft, Plus, TrendingUp, User, Trash2, Trophy } from 'lucide-react';
+import { getScores, addScore, getStudents, getGroups } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
+
+type ScoreType = 'weekly' | 'mock';
+
+const BEGINNER_CATEGORIES = ['vocabulary', 'grammar', 'translation', 'attendance'] as const;
+const ADVANCED_CATEGORIES = ['listening', 'reading', 'speaking', 'writing'] as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  vocabulary: 'Vocabulary',
+  grammar: 'Grammar',
+  translation: 'Translation',
+  attendance: 'Attendance',
+  listening: 'Listening',
+  reading: 'Reading',
+  speaking: 'Speaking',
+  writing: 'Writing',
+};
+
+const normalizeLevel = (raw?: string | null) => {
+  const level = String(raw || '').trim().toLowerCase();
+  if (level.includes('advanced')) return 'advanced';
+  if (level.includes('intermediate')) return 'intermediate';
+  if (level.includes('elementary')) return 'elementary';
+  return 'beginner';
+};
+
+const getCategoriesForLevel = (level: string) => {
+  const normalized = normalizeLevel(level);
+  return normalized === 'intermediate' || normalized === 'advanced'
+    ? [...ADVANCED_CATEGORIES]
+    : [...BEGINNER_CATEGORIES];
+};
 
 export default function ScoresPage() {
   const router = useRouter();
@@ -13,22 +44,28 @@ export default function ScoresPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [scores, setScores] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [formData, setFormData] = useState({
     studentId: '',
-    subject: 'overall',
-    value: 0
+    scoreType: 'weekly' as ScoreType,
+    maxScore: 100,
+    examDate: new Date().toISOString().split('T')[0],
+    examTime: '10:00',
+    sections: {} as Record<string, number>,
   });
 
   const loadData = async () => {
     try {
-      const [scoresData, studentsData] = await Promise.all([getScores(), getStudents()]);
+      const [scoresData, studentsData, groupsData] = await Promise.all([getScores(), getStudents(), getGroups()]);
       setScores(Array.isArray(scoresData) ? scoresData : []);
       setStudents(Array.isArray(studentsData) ? studentsData : []);
+      setGroups(Array.isArray(groupsData) ? groupsData : []);
     } catch {
       setScores([]);
       setStudents([]);
+      setGroups([]);
     }
   };
 
@@ -46,6 +83,36 @@ export default function ScoresPage() {
     const student = students.find((s: any) => String(s.id) === String(score.studentId));
     return student?.group || 'Not Assigned';
   };
+
+  const getLevelForStudent = (studentId: string) => {
+    const student = students.find((s: any) => String(s.id) === String(studentId));
+    if (!student?.group) return 'beginner';
+    const group = groups.find((g: any) => g.name === student.group);
+    return normalizeLevel(group?.level || 'beginner');
+  };
+
+  const currentLevel = getLevelForStudent(formData.studentId);
+  const currentCategories = getCategoriesForLevel(currentLevel);
+
+  useEffect(() => {
+    setFormData((prev) => {
+      const nextSections: Record<string, number> = {};
+      currentCategories.forEach((category) => {
+        nextSections[category] = Number(prev.sections?.[category] || 0);
+      });
+      return { ...prev, sections: nextSections };
+    });
+  }, [formData.studentId]);
+
+  const overallPercent = (() => {
+    if (currentCategories.length === 0) return 0;
+    const max = Number(formData.maxScore || 100) || 100;
+    const percents = currentCategories.map((category) => {
+      const score = Number(formData.sections?.[category] || 0);
+      return (Math.max(0, Math.min(score, max)) / max) * 100;
+    });
+    return Math.round((percents.reduce((sum, value) => sum + value, 0) / currentCategories.length) * 100) / 100;
+  })();
 
   const groupOptions = Array.from(new Set((students || []).map((student: any) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
 
@@ -70,17 +137,40 @@ export default function ScoresPage() {
     }
 
     const student = students.find((s: any) => String(s.id) === String(formData.studentId));
+    const level = getLevelForStudent(formData.studentId);
+    const maxScore = Number(formData.maxScore || 100);
+
+    if (maxScore <= 0) {
+      alert('Max score must be greater than 0');
+      return;
+    }
 
     try {
       await addScore({
         studentId: Number(formData.studentId),
         studentName: student?.fullName || '',
-        subject: formData.subject || 'overall',
-        value: Number(formData.value || 0)
+        subject: formData.scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment',
+        value: Number(overallPercent),
+        overallPercent: Number(overallPercent),
+        level,
+        category: 'overall',
+        scoreType: formData.scoreType,
+        maxScore,
+        mockScore: formData.scoreType === 'mock' ? Number(overallPercent) : null,
+        examDate: formData.examDate,
+        examTime: formData.examTime,
+        breakdown: formData.sections,
       });
 
       await loadData();
-      setFormData({ studentId: '', subject: 'overall', value: 0 });
+      setFormData({
+        studentId: '',
+        scoreType: 'weekly',
+        maxScore: 100,
+        examDate: new Date().toISOString().split('T')[0],
+        examTime: '10:00',
+        sections: {},
+      });
       setShowAddModal(false);
     } catch (error) {
       console.error('Score save error:', error);
@@ -146,15 +236,26 @@ export default function ScoresPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">{getStudentName(score)}</h3>
-                    <p className="text-sm text-gray-500">{getStudentGroup(score) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(score)} · {score.subject || 'overall'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-500">
+                      {getStudentGroup(score) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(score)} · {score.level || 'beginner'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${score.scoreType === 'mock' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {score.scoreType === 'mock' ? 'MOCK EXAM' : 'WEEKLY'}
+                      </span>
+                      {score.examDateTime && (
+                        <span className="text-xs text-gray-500">{new Date(score.examDateTime).toLocaleString()}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2 text-green-600">
                     <TrendingUp className="w-5 h-5" />
-                    <span className="font-semibold">{Number(score.value || 0)}%</span>
+                    <span className="font-semibold">{Number((score.overallPercent ?? score.value) || 0)}%</span>
                   </div>
+                  {score.scoreType === 'mock' && <Trophy className="w-5 h-5 text-purple-600" />}
                   <button
                     onClick={() => handleDeleteScore(score.id)}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
@@ -171,7 +272,24 @@ export default function ScoresPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-xl w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('add_student_score')}</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('add_student_score')}</h2>
+            <p className="text-sm text-gray-500 mb-6">Level-based scoring + MOCK EXAM support</p>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button
+                onClick={() => setFormData((prev) => ({ ...prev, scoreType: 'weekly' }))}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border ${formData.scoreType === 'weekly' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300'}`}
+              >
+                WEEKLY SCORE
+              </button>
+              <button
+                onClick={() => setFormData((prev) => ({ ...prev, scoreType: 'mock' }))}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border ${formData.scoreType === 'mock' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300'}`}
+              >
+                MOCK EXAM
+              </button>
+            </div>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
@@ -190,26 +308,97 @@ export default function ScoresPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('subject')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Level</label>
                 <input
                   type="text"
-                  value={formData.subject}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, subject: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
-                  placeholder="overall"
+                  value={currentLevel}
+                  readOnly
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-700"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('score_range')}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Max score (each section)</label>
                 <input
                   type="number"
-                  min="0"
-                  max="100"
-                  value={formData.value}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, value: Number(e.target.value || 0) }))}
+                  min="1"
+                  max="1000"
+                  value={formData.maxScore}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, maxScore: Number(e.target.value || 100) }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
                 />
+              </div>
+
+              {formData.scoreType === 'mock' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mock Date</label>
+                    <input
+                      type="date"
+                      value={formData.examDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, examDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Mock Time</label>
+                    <input
+                      type="time"
+                      value={formData.examTime}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, examTime: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {currentCategories.map((category) => {
+                  const currentValue = Number(formData.sections?.[category] || 0);
+                  return (
+                    <div key={category} className="rounded-xl border border-gray-200 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-gray-700">{CATEGORY_LABELS[category]}</label>
+                        <span className="text-sm text-gray-500">{currentValue}/{formData.maxScore}</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr,88px] gap-3 items-center">
+                        <input
+                          type="range"
+                          min="0"
+                          max={Math.max(1, Number(formData.maxScore || 100))}
+                          value={currentValue}
+                          onChange={(e) => {
+                            const next = Number(e.target.value || 0);
+                            setFormData((prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, [category]: next },
+                            }));
+                          }}
+                          className="w-full accent-orange-500"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          max={Math.max(1, Number(formData.maxScore || 100))}
+                          value={currentValue}
+                          onChange={(e) => {
+                            const next = Number(e.target.value || 0);
+                            setFormData((prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, [category]: next },
+                            }));
+                          }}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">% Overall (auto)</span>
+                <span className="text-lg font-bold text-gray-900">{overallPercent}%</span>
               </div>
             </div>
 

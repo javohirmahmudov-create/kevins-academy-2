@@ -113,7 +113,17 @@ model Score {
   studentId Int?
   value     Float?
   subject   String?
+  level     String?
+  category  String?
+  scoreType String   @default("weekly")
+  maxScore  Int      @default(100)
+  overallPercent Float?
+  mockScore Float?
+  examDateTime DateTime?
+  breakdown Json?
   createdAt DateTime  @default(now())
 
   @@index([adminId])
+  @@index([scoreType])
+  @@index([studentId, scoreType, createdAt])
 }

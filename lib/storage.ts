@@ -57,7 +57,23 @@ export interface Attendance {
   adminId?: string;
 }
 export interface Material { id: string; title: string; adminId?: string; dueDate?: string; content?: string; fileUrl?: string; fileType?: string; group?: string; uploadedAt?: string }
-export interface Score { id: string; studentId?: string; studentName?: string; subject?: string; value?: number; adminId?: string; createdAt?: string }
+export interface Score {
+  id: string;
+  studentId?: string;
+  studentName?: string;
+  subject?: string;
+  value?: number;
+  adminId?: string;
+  level?: string;
+  category?: string;
+  scoreType?: 'weekly' | 'mock' | string;
+  maxScore?: number;
+  overallPercent?: number;
+  mockScore?: number;
+  examDateTime?: string;
+  breakdown?: Record<string, any>;
+  createdAt?: string;
+}
 export interface Parent {
   id: string;
   fullName?: string;
@@ -97,6 +113,19 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
     }
   }
 
+  const res = await fetch(path, { credentials: 'include', ...opts, headers });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiFetchAsAdmin(path: string, adminId?: string, opts: RequestInit = {}) {
+  const headers = new Headers(opts.headers || {});
+  if (adminId && adminId !== 'system') {
+    headers.set('x-admin-id', String(adminId));
+  }
   const res = await fetch(path, { credentials: 'include', ...opts, headers });
   if (!res.ok) {
     const text = await res.text();
@@ -343,17 +372,17 @@ export const saveParents = async (parents: Parent[]) => {
 export const getDataForAdmin = async (adminId: string, resourceType: 'scores' | 'materials' | 'parents' | 'students' | 'attendance' | 'payments') => {
   switch (resourceType) {
     case 'scores':
-      return getScores();
+      return apiFetchAsAdmin('/api/scores', adminId);
     case 'materials':
-      return getMaterials();
+      return apiFetchAsAdmin('/api/materials', adminId);
     case 'parents':
-      return getParents();
+      return apiFetchAsAdmin('/api/parents', adminId);
     case 'students':
-      return getStudents();
+      return apiFetchAsAdmin('/api/students', adminId);
     case 'attendance':
-      return getAttendance();
+      return apiFetchAsAdmin('/api/attendance', adminId);
     case 'payments':
-      return getPayments();
+      return apiFetchAsAdmin('/api/payments', adminId);
     default:
       return [];
   }

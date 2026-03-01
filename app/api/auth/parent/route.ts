@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       email: matched.email || '',
       phone: matched.phone || '',
       studentId: matched.studentId || '',
-      adminId: 'system',
+      adminId: matched.adminId ? String(matched.adminId) : 'system',
       role: 'parent'
     })
   } catch (error) {

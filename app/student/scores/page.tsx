@@ -122,10 +122,16 @@ export default function StudentScoresPage() {
                 className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100"
               >
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">{score.subject || 'Overall Score'}</h3>
-                  <span className="text-sm text-gray-500">
-                    {new Date(score.createdAt || Date.now()).toLocaleDateString()}
-                  </span>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{score.subject || 'Overall Score'}</h3>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full ${score.scoreType === 'mock' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {score.scoreType === 'mock' ? 'MOCK EXAM' : 'WEEKLY'}
+                      </span>
+                      <span>{score.level || 'beginner'}</span>
+                    </p>
+                  </div>
+                  <span className="text-sm text-gray-500">{new Date(score.createdAt || Date.now()).toLocaleDateString()}</span>
                 </div>
 
                 <div className="space-y-3">
@@ -141,6 +147,22 @@ export default function StudentScoresPage() {
                       style={{ width: `${Number(score.value || 0)}%` }}
                     />
                   </div>
+
+                  {score.breakdown && typeof score.breakdown === 'object' && (
+                    <div className="pt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {Object.entries(score.breakdown as Record<string, any>).map(([key, val]) => {
+                        const percent = typeof val === 'object' && val !== null
+                          ? Number((val as any).percent ?? 0)
+                          : Number(val || 0);
+                        return (
+                          <div key={key} className="text-xs text-gray-600 bg-gray-50 rounded-md px-2 py-1 flex justify-between">
+                            <span className="capitalize">{key}</span>
+                            <span className="font-semibold">{percent}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}

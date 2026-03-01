@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 
 type ParentSession = Parent & { adminId: string };
 
@@ -41,6 +42,12 @@ interface ActivityItem {
   date: string;
 }
 
+interface RankingSummary {
+  weeklyRank: number;
+  mockRank: number;
+  totalInGroup: number;
+}
+
 export default function ParentDashboard() {
   const router = useRouter();
   const { currentParent, logoutParent, t } = useApp();
@@ -48,6 +55,8 @@ export default function ParentDashboard() {
   const [childSummary, setChildSummary] = useState<ChildSummary | null>(null);
   const [skills, setSkills] = useState<SkillBreakdown[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [ranking, setRanking] = useState<RankingSummary>({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
+  const [trendData, setTrendData] = useState<Array<Record<string, any>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +84,49 @@ export default function ParentDashboard() {
         String((score as any).studentId || '') === String(child.id) ||
         (score as any).studentName === child.fullName
       );
+
+      const groupStudents = students.filter((student) => student.group === child.group);
+      const groupStudentIds = new Set(groupStudents.map((student) => String(student.id)));
+      const groupScores = scores.filter((score) => groupStudentIds.has(String((score as any).studentId || '')));
+
+      const buildRankMap = (type: 'weekly' | 'mock') => {
+        const latestByStudent = new Map<string, number>();
+        const rows = groupScores
+          .filter((row: any) => (row.scoreType || 'weekly') === type)
+          .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+        rows.forEach((row: any) => {
+          const sid = String(row.studentId || '');
+          if (!sid || latestByStudent.has(sid)) return;
+          latestByStudent.set(sid, Number(row.overallPercent ?? row.value ?? 0));
+        });
+
+        const ranked = groupStudents
+          .map((student) => ({ studentId: String(student.id), score: latestByStudent.get(String(student.id)) ?? 0 }))
+          .sort((a, b) => b.score - a.score);
+
+        let lastScore: number | null = null;
+        let currentRank = 0;
+        const rankMap = new Map<string, number>();
+
+        ranked.forEach((item, index) => {
+          if (lastScore === null || item.score < lastScore) {
+            currentRank = index + 1;
+            lastScore = item.score;
+          }
+          rankMap.set(item.studentId, currentRank);
+        });
+
+        return rankMap;
+      };
+
+      const weeklyRankMap = buildRankMap('weekly');
+      const mockRankMap = buildRankMap('mock');
+      setRanking({
+        weeklyRank: weeklyRankMap.get(String(child.id)) || 0,
+        mockRank: mockRankMap.get(String(child.id)) || 0,
+        totalInGroup: groupStudents.length,
+      });
 
       const attendance = (await getDataForAdmin(sessionParent.adminId, 'attendance') as Attendance[] | null) || [];
       const childAttendance = attendance.filter(record =>
@@ -126,6 +178,31 @@ export default function ParentDashboard() {
         );
         }
       }
+
+      const latestRelevantScores = childScores
+        .sort((a: any, b: any) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+        .slice(-8);
+
+      const trend = latestRelevantScores.map((score: any) => {
+        const base: Record<string, any> = {
+          label: new Date(score.createdAt || Date.now()).toLocaleDateString(),
+          overall: Number(score.overallPercent ?? score.value ?? 0),
+          type: score.scoreType || 'weekly',
+        };
+
+        if (score.breakdown && typeof score.breakdown === 'object') {
+          Object.entries(score.breakdown as Record<string, any>).forEach(([key, value]) => {
+            if (value && typeof value === 'object' && typeof (value as any).percent === 'number') {
+              base[key] = Number((value as any).percent);
+            } else if (typeof value === 'number') {
+              base[key] = Number(value);
+            }
+          });
+        }
+
+        return base;
+      });
+      setTrendData(trend);
 
       const activities: ActivityItem[] = [];
 
@@ -180,6 +257,8 @@ export default function ParentDashboard() {
       setChildSummary(null);
       setSkills([]);
       setRecentActivity([]);
+      setRanking({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
+      setTrendData([]);
     } finally {
       setLoading(false);
     }
@@ -241,6 +320,66 @@ export default function ParentDashboard() {
         <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
             <div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+            >
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Group Ranking</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Weekly Rank</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">
+                    {ranking.weeklyRank > 0 ? `#${ranking.weeklyRank}` : 'N/A'}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 p-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Mock Exam Rank</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">
+                    {ranking.mockRank > 0 ? `#${ranking.mockRank}` : 'N/A'}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-green-50 dark:bg-green-900/20 p-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Group Size</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-300">{ranking.totalInGroup || 0}</p>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+            >
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Criteria Trend</h3>
+              {trendData.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Not enough score data yet.</p>
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="label" />
+                      <YAxis domain={[0, 100]} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="overall" name="Overall" stroke="#2563eb" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="vocabulary" stroke="#0ea5e9" dot={false} />
+                      <Line type="monotone" dataKey="grammar" stroke="#8b5cf6" dot={false} />
+                      <Line type="monotone" dataKey="translation" stroke="#14b8a6" dot={false} />
+                      <Line type="monotone" dataKey="attendance" stroke="#22c55e" dot={false} />
+                      <Line type="monotone" dataKey="listening" stroke="#f97316" dot={false} />
+                      <Line type="monotone" dataKey="reading" stroke="#eab308" dot={false} />
+                      <Line type="monotone" dataKey="speaking" stroke="#ec4899" dot={false} />
+                      <Line type="monotone" dataKey="writing" stroke="#ef4444" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </motion.div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin's Academy</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">Parent Portal</p>
             </div>

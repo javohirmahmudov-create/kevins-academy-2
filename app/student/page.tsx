@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { getDataForAdmin } from '@/lib/storage';
+import { getDataForAdmin, getStudents } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 import { BookOpen, BarChart3, LogOut, GraduationCap, AlertCircle } from 'lucide-react';
 
@@ -45,6 +45,7 @@ export default function StudentDashboard() {
   const [averageScore, setAverageScore] = useState(0);
   const [skillBreakdown, setSkillBreakdown] = useState<SkillResult[]>([]);
   const [latestScoreDate, setLatestScoreDate] = useState<string | null>(null);
+  const [ranking, setRanking] = useState({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
 
   useEffect(() => {
     if (currentStudent) {
@@ -70,12 +71,37 @@ export default function StudentDashboard() {
 
     (async () => {
       try {
-        const allScores = (await getDataForAdmin('system', 'scores')) || [];
+        const [allScores, allStudents] = await Promise.all([
+          getDataForAdmin('system', 'scores'),
+          getStudents(),
+        ]);
         const studentScores = allScores.filter((s: any) =>
           String(s.studentId || '') === String(student.id) ||
           s.studentName === student.fullName
         );
         setScores(studentScores);
+
+        const studentGroup = (allStudents || []).find((s: any) => String(s.id) === String(student.id))?.group;
+        if (studentGroup) {
+          const [weeklyRes, mockRes] = await Promise.all([
+            fetch(`/api/scores?mode=ranking&group=${encodeURIComponent(studentGroup)}&scoreType=weekly`).then((res) => res.json()),
+            fetch(`/api/scores?mode=ranking&group=${encodeURIComponent(studentGroup)}&scoreType=mock`).then((res) => res.json()),
+          ]);
+
+          const weeklyRow = Array.isArray(weeklyRes)
+            ? weeklyRes.find((row: any) => String(row.studentId) === String(student.id))
+            : null;
+          const mockRow = Array.isArray(mockRes)
+            ? mockRes.find((row: any) => String(row.studentId) === String(student.id))
+            : null;
+
+          const totalInGroup = Array.isArray(weeklyRes) ? weeklyRes.length : 0;
+          setRanking({
+            weeklyRank: Number(weeklyRow?.rank || 0),
+            mockRank: Number(mockRow?.rank || 0),
+            totalInGroup,
+          });
+        }
 
         if (studentScores.length > 0) {
           const latest = studentScores[studentScores.length - 1];
@@ -111,6 +137,7 @@ export default function StudentDashboard() {
           setAverageScore(0);
           setSkillBreakdown([]);
           setLatestScoreDate(null);
+          setRanking({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
         }
       } catch (error) {
         console.error('Error loading scores:', error);
@@ -246,6 +273,35 @@ export default function StudentDashboard() {
                 ))}
               </div>
             )}
+          </motion.div>
+        </section>
+
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-6"
+          >
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Group Weekly Rank</p>
+            <p className="text-3xl font-bold text-blue-600 dark:text-blue-300">{ranking.weeklyRank ? `#${ranking.weeklyRank}` : 'N/A'}</p>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-6"
+          >
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Group Mock Rank</p>
+            <p className="text-3xl font-bold text-purple-600 dark:text-purple-300">{ranking.mockRank ? `#${ranking.mockRank}` : 'N/A'}</p>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-6"
+          >
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Students in Group</p>
+            <p className="text-3xl font-bold text-green-600 dark:text-green-300">{ranking.totalInGroup || 0}</p>
           </motion.div>
         </section>
 

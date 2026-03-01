@@ -107,6 +107,18 @@ model Material {
   @@index([adminId])
 }
 
+model TelegramLink {
+  id              Int      @id @default(autoincrement())
+  phoneNormalized String   @unique
+  chatId          String
+  lastRawPhone    String?
+  lastUsername    String?
+  lastFirstName   String?
+  lastLastName    String?
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @updatedAt
+}
+
 model Score {
   id        Int       @id @default(autoincrement())
   adminId   Int?

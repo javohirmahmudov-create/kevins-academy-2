@@ -2,6 +2,26 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
+import { buildTelegramStartLink, findTelegramChatIdByPhone, normalizePhoneForDisplay, queueTelegramTask, sendTelegramMessage } from '@/lib/telegram'
+
+async function resolveStudentName(studentId?: string) {
+  const parsed = Number(studentId || '')
+  if (!Number.isFinite(parsed) || parsed <= 0) return "o'quvchi"
+  const student = await prisma.student.findUnique({ where: { id: parsed }, select: { fullName: true } })
+  return student?.fullName || "o'quvchi"
+}
+
+async function maybeSendParentWelcome(input: {
+  chatId?: string
+  parentName?: string
+  studentName?: string
+}) {
+  if (!input.chatId) return
+  const text = `🎉 <b>Xush kelibsiz!</b>\n\nHurmatli <b>${input.parentName || 'ota-ona'}</b>, siz <b>${input.studentName || "o'quvchi"}</b>ning darslarini kuzatish uchun tizimga muvaffaqiyatli qo'shildingiz.`
+  queueTelegramTask(async () => {
+    await sendTelegramMessage({ chatId: input.chatId!, text })
+  })
+}
 
 export async function GET(request: Request) {
   try {
@@ -10,7 +30,17 @@ export async function GET(request: Request) {
       where: adminId ? { adminId } : undefined,
       orderBy: { createdAt: 'desc' }
     })
-    const mapped = Array.isArray(parents) ? parents.map(unpackParent) : []
+    const mapped = Array.isArray(parents)
+      ? parents.map((parent) => {
+          const unpacked = unpackParent(parent) as any
+          return {
+            ...unpacked,
+            telegramConnected: Boolean(unpacked?.telegramChatId),
+            telegramInviteLink: buildTelegramStartLink(unpacked?.phone || parent.phone),
+            normalizedPhone: normalizePhoneForDisplay(unpacked?.phone || parent.phone),
+          }
+        })
+      : []
     return NextResponse.json(mapped)
   } catch (error) {
     return NextResponse.json([])
@@ -26,7 +56,14 @@ export async function POST(request: Request) {
       password: body.password || undefined,
       studentId: body.studentId || undefined,
       phone: body.phone || undefined,
+      telegramChatId: undefined as string | undefined,
     }
+
+    const autoLinkedChatId = await findTelegramChatIdByPhone(metadata.phone)
+    if (autoLinkedChatId) {
+      metadata.telegramChatId = autoLinkedChatId
+    }
+
     const hasMetadata = Boolean(metadata.username || metadata.password || metadata.studentId)
 
     const parent = await prisma.parent.create({
@@ -37,6 +74,16 @@ export async function POST(request: Request) {
         phone: hasMetadata ? encodeParentMetadata(metadata) : (body.phone || null)
       }
     })
+
+    if (autoLinkedChatId) {
+      const studentName = await resolveStudentName(metadata.studentId)
+      await maybeSendParentWelcome({
+        chatId: autoLinkedChatId,
+        parentName: body.fullName || 'ota-ona',
+        studentName,
+      })
+    }
+
     return NextResponse.json(unpackParent(parent))
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
@@ -66,6 +113,12 @@ export async function PUT(request: Request) {
       password: body.password !== undefined ? (body.password || undefined) : existingMeta?.password,
       studentId: body.studentId !== undefined ? (body.studentId || undefined) : existingMeta?.studentId,
       phone: body.phone !== undefined ? (body.phone || undefined) : (existingMeta?.phone ?? existing.phone ?? undefined),
+      telegramChatId: existingMeta?.telegramChatId,
+    }
+
+    const autoLinkedChatId = await findTelegramChatIdByPhone(nextMetadata.phone)
+    if (autoLinkedChatId) {
+      nextMetadata.telegramChatId = autoLinkedChatId
     }
 
     const hasMetadata = Boolean(nextMetadata.username || nextMetadata.password || nextMetadata.studentId)
@@ -79,6 +132,17 @@ export async function PUT(request: Request) {
     }
 
     const parent = await prisma.parent.update({ where: { id }, data })
+
+    const becameConnected = !existingMeta?.telegramChatId && Boolean(nextMetadata.telegramChatId)
+    if (becameConnected && nextMetadata.telegramChatId) {
+      const studentName = await resolveStudentName(nextMetadata.studentId)
+      await maybeSendParentWelcome({
+        chatId: nextMetadata.telegramChatId,
+        parentName: body.fullName || existing.fullName,
+        studentName,
+      })
+    }
+
     return NextResponse.json(unpackParent(parent))
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })

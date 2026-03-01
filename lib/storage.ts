@@ -84,6 +84,10 @@ export interface Parent {
   phone?: string;
   studentId?: string;
   adminId?: string;
+  telegramChatId?: string;
+  telegramConnected?: boolean;
+  telegramInviteLink?: string;
+  normalizedPhone?: string;
   createdAt?: string;
 }
 

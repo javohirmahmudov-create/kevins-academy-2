@@ -8,6 +8,11 @@ export type ParentAuthMetadata = {
   telegramChatId?: string;
 };
 
+export function isParentTelegramConnected(storedPhone?: string | null) {
+  const metadata = decodeParentMetadata(storedPhone);
+  return Boolean(metadata?.telegramChatId);
+}
+
 function toBase64(value: string) {
   return Buffer.from(value, 'utf8').toString('base64');
 }

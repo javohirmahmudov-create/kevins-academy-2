@@ -17,6 +17,14 @@ type NotifyParentsInput = {
   buttonText?: string
 }
 
+type UpsertTelegramPhoneLinkInput = {
+  phone: string
+  chatId: string
+  username?: string
+  firstName?: string
+  lastName?: string
+}
+
 function getBotToken() {
   return process.env.TELEGRAM_BOT_TOKEN || ''
 }
@@ -139,4 +147,55 @@ export function formatTelegramDate(value?: string | Date | null) {
 
 export function normalizePhoneForLinking(phone?: string | null) {
   return normalizePhone(phone)
+}
+
+export function normalizePhoneForDisplay(phone?: string | null) {
+  const normalized = normalizePhone(phone)
+  return normalized ? `+${normalized}` : ''
+}
+
+export function buildTelegramStartLink(phone?: string | null) {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || ''
+  const normalized = normalizePhoneForDisplay(phone)
+  if (!botUsername || !normalized) return ''
+  return `https://t.me/${botUsername}?start=${encodeURIComponent(normalized)}`
+}
+
+export async function findTelegramChatIdByPhone(phone?: string | null) {
+  const normalized = normalizePhoneForLinking(phone)
+  if (!normalized) return ''
+
+  const telegramLinkDelegate = (prisma as any).telegramLink
+  if (!telegramLinkDelegate) return ''
+  const row = await telegramLinkDelegate.findUnique({ where: { phoneNormalized: normalized } })
+  return row?.chatId ? String(row.chatId) : ''
+}
+
+export async function upsertTelegramPhoneLink(input: UpsertTelegramPhoneLinkInput) {
+  const normalized = normalizePhoneForLinking(input.phone)
+  if (!normalized || !input.chatId) return null
+
+  const telegramLinkDelegate = (prisma as any).telegramLink
+  if (!telegramLinkDelegate) return null
+
+  const row = await telegramLinkDelegate.upsert({
+    where: { phoneNormalized: normalized },
+    create: {
+      phoneNormalized: normalized,
+      chatId: String(input.chatId),
+      lastRawPhone: input.phone,
+      lastUsername: input.username || null,
+      lastFirstName: input.firstName || null,
+      lastLastName: input.lastName || null,
+    },
+    update: {
+      chatId: String(input.chatId),
+      lastRawPhone: input.phone,
+      lastUsername: input.username || null,
+      lastFirstName: input.firstName || null,
+      lastLastName: input.lastName || null,
+    }
+  })
+
+  return row
 }

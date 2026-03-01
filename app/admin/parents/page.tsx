@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Users, Mail, Phone, Trash2, Edit } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Mail, Phone, Trash2, Edit, Send } from 'lucide-react';
 import { getParents, getStudents, saveParents, Parent } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 
@@ -134,6 +134,33 @@ export default function ParentsPage() {
     return student ? student.fullName : t('unknown_student');
   };
 
+  const handleSendBotLink = async (parent: Parent) => {
+    const directLink = parent.telegramInviteLink || '';
+    if (directLink) {
+      try {
+        await navigator.clipboard.writeText(directLink);
+        alert(t('bot_link_copied'));
+      } catch {
+        alert(`${t('bot_link_manual')}: ${directLink}`);
+      }
+      return;
+    }
+
+    const fallbackPhone = parent.normalizedPhone || parent.phone || '';
+    if (!fallbackPhone) {
+      alert(t('bot_link_not_available'));
+      return;
+    }
+
+    const manualCommand = `/start ${fallbackPhone}`;
+    try {
+      await navigator.clipboard.writeText(manualCommand);
+      alert(t('start_command_copied'));
+    } catch {
+      alert(`${t('send_start_command')}: ${manualCommand}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -188,6 +215,30 @@ export default function ParentsPage() {
                     <span>{parent.phone}</span>
                   </div>
                 )}
+
+                <div className="pt-2 border-t border-gray-200">
+                  <span className="text-xs text-gray-500 mr-2">Telegram:</span>
+                  {(parent as any).telegramConnected ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                      🟢 {t('telegram_connected')}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                      🔴 {t('telegram_not_connected')}
+                    </span>
+                  )}
+                </div>
+
+                {!(parent as any).telegramConnected && (
+                  <button
+                    onClick={() => handleSendBotLink(parent)}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 text-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{t('send_bot_link')}</span>
+                  </button>
+                )}
+
                 <div className="pt-2 border-t border-gray-200">
                   <span className="text-xs text-gray-500">{t('child')}: </span>
                   <span className="text-sm font-medium text-blue-600">{getStudentName(parent.studentId)}</span>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
-import { normalizePhoneForLinking, sendTelegramMessage } from '@/lib/telegram'
+import { normalizePhoneForLinking, sendTelegramMessage, upsertTelegramPhoneLink } from '@/lib/telegram'
 
 function parseStartLinkCode(text: string) {
   const normalized = text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const message = body?.message || body?.edited_message
     const chatId = message?.chat?.id ? String(message.chat.id) : ''
+    const fromUser = message?.from || null
     const text = typeof message?.text === 'string'
       ? message.text
       : (typeof message?.caption === 'string' ? message.caption : '')
@@ -72,6 +73,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    await upsertTelegramPhoneLink({
+      phone: normalizedInputPhone,
+      chatId,
+      username: fromUser?.username || undefined,
+      firstName: fromUser?.first_name || undefined,
+      lastName: fromUser?.last_name || undefined,
+    })
+
     const parents = await prisma.parent.findMany({ orderBy: { createdAt: 'desc' } })
     let matchedParent: any = null
 
@@ -87,7 +96,7 @@ export async function POST(request: Request) {
     if (!matchedParent) {
       const sent = await sendTelegramMessage({
         chatId,
-        text: "❌ Ushbu telefon raqami bo'yicha ota-ona topilmadi.\nIltimos, maktab administratori bilan bog'laning."
+        text: "ℹ️ Telefon raqamingiz qabul qilindi.\nHozircha bu raqam bo'yicha ota-ona topilmadi.\nAdmin sizni tizimga qo'shganidan so'ng avtomatik ulanadi."
       })
       if (!sent.ok) {
         console.error('Telegram webhook: failed sending parent-not-found message', sent)

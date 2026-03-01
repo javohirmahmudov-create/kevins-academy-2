@@ -114,6 +114,22 @@ export default function ScoresPage() {
     return Math.round((percents.reduce((sum, value) => sum + value, 0) / currentCategories.length) * 100) / 100;
   })();
 
+  const isFormValid = (() => {
+    const hasStudent = Boolean(formData.studentId);
+    const validMaxScore = Number(formData.maxScore || 0) > 0;
+    const validMockDateTime =
+      formData.scoreType !== 'mock' || (Boolean(formData.examDate) && Boolean(formData.examTime));
+
+    const allSectionsValid =
+      currentCategories.length > 0 &&
+      currentCategories.every((category) => {
+        const raw = Number(formData.sections?.[category]);
+        return Number.isFinite(raw) && raw >= 0 && raw <= Number(formData.maxScore || 100);
+      });
+
+    return hasStudent && validMaxScore && validMockDateTime && allSectionsValid;
+  })();
+
   const groupOptions = Array.from(new Set((students || []).map((student: any) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
 
   const filteredScores = (scores || []).filter((score: any) => {
@@ -413,8 +429,19 @@ export default function ScoresPage() {
             <div className="px-5 sm:px-7 py-4 border-t border-gray-100 bg-white sticky bottom-0">
               <div className="flex space-x-3">
                 <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
-                <button onClick={handleAddScore} className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg">{t('add_score')}</button>
+                <button
+                  onClick={handleAddScore}
+                  disabled={!isFormValid}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('add_score')}
+                </button>
               </div>
+              {!isFormValid && (
+                <p className="text-xs text-gray-500 mt-2">
+                  O‘quvchi, max score va barcha bo‘lim ballari to‘g‘ri kiritilganda qo‘shish tugmasi aktiv bo‘ladi.
+                </p>
+              )}
             </div>
           </motion.div>
         </div>

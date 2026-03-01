@@ -139,6 +139,19 @@ export default function AttendancePage() {
     return dateB - dateA;
   });
 
+  const attendanceByDate = filteredAttendance.reduce((acc: Record<string, AttendanceRecord[]>, record) => {
+    const key = record.date ? String(record.date).split('T')[0] : 'unknown';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(record);
+    return acc;
+  }, {});
+
+  const groupedDates = Object.keys(attendanceByDate).sort((a, b) => {
+    if (a === 'unknown') return 1;
+    if (b === 'unknown') return -1;
+    return new Date(b).getTime() - new Date(a).getTime();
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -181,60 +194,73 @@ export default function AttendancePage() {
             ))}
           </select>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('student')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('group')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('date')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('comment')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                  {filteredAttendance.map((record, index: number) => (
-                  <motion.tr key={record.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
-                          <User className="w-5 h-5 text-white" />
-                        </div>
-                        <span className="font-medium text-gray-900">{getStudentDisplayName(record)}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{getStudentGroup(record) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(record)}</td>
-                    <td className="px-6 py-4 text-gray-600">{record.date ? new Date(record.date).toLocaleDateString() : '-'}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-2">
-                        {getStatusIcon(record.status || 'present')}
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status || 'present')}`}>
-                          {t(String(record.status || 'present'))}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{record.note || '-'}</td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={async () => {
-                          await fetch(`/api/attendance?id=${encodeURIComponent(String(record.id))}`, {
-                            method: 'DELETE'
-                          });
-                          await loadData();
-                        }}
-                        className="text-red-600 hover:text-red-700 text-sm font-medium"
-                      >
-                        {t('delete')}
-                      </button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
+        {groupedDates.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-10 text-center text-gray-500">
+            {t('not_available')}
           </div>
-        </div>
+        ) : (
+          <div className="space-y-6">
+            {groupedDates.map((dateKey) => (
+              <div key={dateKey} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 bg-pink-50/60">
+                  <span className="inline-flex items-center rounded-lg bg-white px-3 py-1 text-sm font-semibold text-gray-800 border border-pink-100">
+                    {dateKey === 'unknown' ? t('not_available') : new Date(dateKey).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('student')}</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('group')}</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('comment')}</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {attendanceByDate[dateKey].map((record, index: number) => (
+                        <motion.tr key={`${dateKey}-${record.id}`} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
+                                <User className="w-5 h-5 text-white" />
+                              </div>
+                              <span className="font-medium text-gray-900">{getStudentDisplayName(record)}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">{getStudentGroup(record) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(record)}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-2">
+                              {getStatusIcon(record.status || 'present')}
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status || 'present')}`}>
+                                {t(String(record.status || 'present'))}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">{record.note || '-'}</td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={async () => {
+                                await fetch(`/api/attendance?id=${encodeURIComponent(String(record.id))}`, {
+                                  method: 'DELETE'
+                                });
+                                await loadData();
+                              }}
+                              className="text-red-600 hover:text-red-700 text-sm font-medium"
+                            >
+                              {t('delete')}
+                            </button>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {showMarkModal && (

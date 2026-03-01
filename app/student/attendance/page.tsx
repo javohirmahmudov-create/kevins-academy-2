@@ -62,6 +62,19 @@ export default function StudentAttendancePage() {
 
   const attendanceRate = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
 
+  const groupedAttendance = (attendance || []).reduce((acc: Record<string, any[]>, record: any) => {
+    const key = record?.date ? String(record.date).split('T')[0] : 'unknown';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(record);
+    return acc;
+  }, {});
+
+  const groupedDates = Object.keys(groupedAttendance).sort((a, b) => {
+    if (a === 'unknown') return 1;
+    if (b === 'unknown') return -1;
+    return new Date(b).getTime() - new Date(a).getTime();
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -150,48 +163,55 @@ export default function StudentAttendancePage() {
             <p className="text-gray-600">Your teacher hasn't marked any attendance yet.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Date</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {(attendance || []).map((record, index) => (
-                    <motion.tr
-                      key={record.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="hover:bg-gray-50"
-                    >
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {new Date(record.date).toLocaleDateString('en-US', { 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
+          <div className="space-y-6">
+            {groupedDates.map((dateKey) => (
+              <div key={dateKey} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 bg-blue-50/70">
+                  <span className="inline-flex items-center rounded-lg bg-white px-3 py-1 text-sm font-semibold text-gray-800 border border-blue-100">
+                    {dateKey === 'unknown'
+                      ? 'Unknown Date'
+                      : new Date(dateKey).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
                         })}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(record.status)}
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.status)}`}>
-                            {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {record.notes || '-'}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {(groupedAttendance[dateKey] || []).map((record, index) => (
+                        <motion.tr
+                          key={`${dateKey}-${record.id}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="hover:bg-gray-50"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-2">
+                              {getStatusIcon(record.status)}
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.status)}`}>
+                                {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {record.notes || '-'}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>

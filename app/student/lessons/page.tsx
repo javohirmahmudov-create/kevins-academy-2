@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Download, FileText, Video, Image as ImageIcon, File } from 'lucide-react';
+import { ArrowLeft, Download, FileText, Video, Image as ImageIcon, File, Maximize } from 'lucide-react';
 import { getDataForAdmin } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 
 export default function StudentLessonsPage() {
   const router = useRouter();
-  const { currentStudent } = useApp();
+  const { currentStudent, t } = useApp();
   const [student, setStudent] = useState<any | null>(null);
   const [materials, setMaterials] = useState<any[]>([]);
 
@@ -69,6 +69,30 @@ export default function StudentLessonsPage() {
       case 'video': return 'from-purple-500 to-purple-600';
       case 'image': return 'from-green-500 to-green-600';
       default: return 'from-blue-500 to-blue-600';
+    }
+  };
+
+  const openVideoFullscreen = (materialId: string | number, fileUrl?: string) => {
+    const video = document.getElementById(`student-video-${materialId}`) as HTMLVideoElement | null;
+
+    if (video) {
+      if (video.requestFullscreen) {
+        video.requestFullscreen().catch(() => {
+          if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        });
+      } else {
+        const safariVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+        if (safariVideo.webkitEnterFullscreen) {
+          safariVideo.webkitEnterFullscreen();
+        } else if (fileUrl) {
+          window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        }
+      }
+      return;
+    }
+
+    if (fileUrl) {
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -153,15 +177,24 @@ export default function StudentLessonsPage() {
                         )}
                       </div>
                       {isVideo && material.fileUrl ? (
-                        <div className="overflow-hidden rounded-xl border border-gray-200 bg-black/5">
+                        <div className="space-y-2">
+                          <div className="overflow-hidden rounded-xl border border-gray-200 bg-black/5">
                           <video
+                            id={`student-video-${material.id}`}
                             src={material.fileUrl}
                             controls
-                            playsInline
                             width="100%"
                             className="w-full h-auto max-h-72 object-contain"
                             preload="metadata"
                           />
+                        </div>
+                        <button
+                          onClick={() => openVideoFullscreen(material.id, material.fileUrl)}
+                          className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100"
+                        >
+                          <Maximize className="w-4 h-4" />
+                          <span>{t('fullscreen')}</span>
+                        </button>
                         </div>
                       ) : (
                         <a

@@ -264,6 +264,8 @@ const translations = {
     'mock_score': 'Mock ball',
     'rank': 'O\'rin',
     'no_ranking_data': 'Reyting ma\'lumotlari hali yo\'q',
+    'fullscreen': 'To\'liq ekran',
+    'open_video': 'Videoni ochish',
   },
   en: {
     'welcome': 'Welcome',
@@ -477,6 +479,8 @@ const translations = {
     'mock_score': 'Mock Score',
     'rank': 'Rank',
     'no_ranking_data': 'No ranking data yet',
+    'fullscreen': 'Fullscreen',
+    'open_video': 'Open Video',
   }
 };
 

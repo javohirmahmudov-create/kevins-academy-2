@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download, Maximize } from 'lucide-react';
 import { getMaterials, getGroups, addMaterial, Material, Group } from '@/lib/storage';
 import { upload } from '@vercel/blob/client';
 import { useApp } from '@/lib/app-context';
@@ -118,6 +118,30 @@ export default function MaterialsPage() {
     }
   };
 
+  const openVideoFullscreen = (materialId: string | number, fileUrl?: string) => {
+    const video = document.getElementById(`material-video-${materialId}`) as HTMLVideoElement | null;
+
+    if (video) {
+      if (video.requestFullscreen) {
+        video.requestFullscreen().catch(() => {
+          if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        });
+      } else {
+        const safariVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+        if (safariVideo.webkitEnterFullscreen) {
+          safariVideo.webkitEnterFullscreen();
+        } else if (fileUrl) {
+          window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        }
+      }
+      return;
+    }
+
+    if (fileUrl) {
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -179,9 +203,9 @@ export default function MaterialsPage() {
                     {(material.fileType || material.type) === 'video' && material.fileUrl && (
                       <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-black/5">
                         <video
+                          id={`material-video-${material.id}`}
                           src={material.fileUrl}
                           controls
-                          playsInline
                           width="100%"
                           className="w-full h-auto max-h-72 object-contain"
                           preload="metadata"
@@ -189,6 +213,15 @@ export default function MaterialsPage() {
                       </div>
                     )}
                     <div className="flex space-x-2">
+                      {(material.fileType || material.type) === 'video' && material.fileUrl && (
+                        <button
+                          onClick={() => openVideoFullscreen(material.id, material.fileUrl)}
+                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
+                        >
+                          <Maximize className="w-4 h-4" />
+                          <span className="text-sm">{t('fullscreen')}</span>
+                        </button>
+                      )}
                       {(material.fileType || material.type) !== 'video' && material.fileUrl && (
                         <a
                           href={material.fileUrl}

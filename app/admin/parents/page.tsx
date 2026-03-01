@@ -27,8 +27,8 @@ export default function ParentsPage() {
     (async () => {
       const p = await getParents();
       const s = await getStudents();
-      setParents(p);
-      setStudents(s);
+      setParents(Array.isArray(p) ? p : []);
+      setStudents(Array.isArray(s) ? s : []);
     })();
   }, []);
 
@@ -38,22 +38,28 @@ export default function ParentsPage() {
       return;
     }
 
-    const parents = await getParents();
-    const newParent: Parent = {
-      id: `parent_${Date.now()}`,
-      fullName: formData.fullName,
-      username: formData.username,
-      password: formData.password,
-      email: formData.email,
-      phone: formData.phone,
-      studentId: formData.studentId,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const parents = await getParents();
+      const newParent: Parent = {
+        id: `parent_${Date.now()}`,
+        fullName: formData.fullName,
+        username: formData.username,
+        password: formData.password,
+        email: formData.email,
+        phone: formData.phone,
+        studentId: formData.studentId,
+        createdAt: new Date().toISOString()
+      };
 
-    await saveParents([...parents, newParent]);
-    setParents(await getParents());
-    setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
-    setShowAddModal(false);
+      await saveParents([...(parents || []), newParent]);
+      setParents(await getParents());
+      setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Parent save error:', error);
+      setParents([]);
+      alert('Failed to save parent');
+    }
   };
 
   const handleEditParent = (parent: Parent) => {
@@ -87,25 +93,37 @@ export default function ParentsPage() {
       updateData.password = formData.password;
     }
 
-    const parents = await getParents();
-    const updatedParents = parents.map(parent =>
-      parent.id === editingParent.id
-        ? { ...parent, ...updateData }
-        : parent
-    );
-    await saveParents(updatedParents);
-    setParents(await getParents());
-    setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
-    setEditingParent(null);
-    setShowEditModal(false);
+    try {
+      const parents = await getParents();
+      const updatedParents = (parents || []).map(parent =>
+        parent.id === editingParent.id
+          ? { ...parent, ...updateData }
+          : parent
+      );
+      await saveParents(updatedParents);
+      setParents(await getParents());
+      setFormData({ fullName: '', username: '', password: '', email: '', phone: '', studentId: '' });
+      setEditingParent(null);
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Parent update error:', error);
+      setParents([]);
+      alert('Failed to update parent');
+    }
   };
 
   const handleDeleteParent = async (id: string) => {
     if (confirm('Are you sure you want to delete this parent?')) {
-      const parents = await getParents();
-      const filteredParents = parents.filter(parent => parent.id !== id);
-      await saveParents(filteredParents);
-      setParents(await getParents());
+      try {
+        const parents = await getParents();
+        const filteredParents = (parents || []).filter(parent => parent.id !== id);
+        await saveParents(filteredParents);
+        setParents(await getParents());
+      } catch (error) {
+        console.error('Parent delete error:', error);
+        setParents([]);
+        alert('Failed to delete parent');
+      }
     }
   };
 
@@ -137,7 +155,7 @@ export default function ParentsPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {parents.map((parent, index) => (
+          {(parents || []).map((parent, index) => (
             <motion.div key={parent.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
@@ -208,7 +226,7 @@ export default function ParentsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Child (Student) *</label>
                 <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
                   <option value="">Select student</option>
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <option key={student.id} value={student.id}>{student.fullName}</option>
                   ))}
                 </select>
@@ -252,7 +270,7 @@ export default function ParentsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Child (Student) *</label>
                 <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
                   <option value="">Select student</option>
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <option key={student.id} value={student.id}>{student.fullName}</option>
                   ))}
                 </select>

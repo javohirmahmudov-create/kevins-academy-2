@@ -161,7 +161,7 @@ export default function StudentAttendancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {attendance.map((record, index) => (
+                  {(attendance || []).map((record, index) => (
                     <motion.tr
                       key={record.id}
                       initial={{ opacity: 0 }}

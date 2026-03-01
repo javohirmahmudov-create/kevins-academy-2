@@ -4,18 +4,29 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, CheckCircle, XCircle, Clock, User } from 'lucide-react';
-import { getAttendance, saveAttendance, getStudents, Attendance } from '@/lib/storage';
+import { getAttendance, addAttendance, getStudents } from '@/lib/storage';
+
+type AttendanceStatus = 'present' | 'absent' | 'late';
+
+interface AttendanceRecord {
+  id: string;
+  studentName?: string;
+  studentId?: string | number;
+  date?: string;
+  status?: AttendanceStatus | string;
+  group?: string;
+}
+
+interface StudentOption {
+  id: string | number;
+  fullName: string;
+}
 
 export default function AttendancePage() {
   const router = useRouter();
   const [showMarkModal, setShowMarkModal] = useState(false);
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-
-  useEffect(() => {
-    setAttendance(getAttendance());
-    setStudents(getStudents());
-  }, []);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [students, setStudents] = useState<StudentOption[]>([]);
   const [formData, setFormData] = useState<{
     studentName: string;
     date: string;
@@ -26,28 +37,40 @@ export default function AttendancePage() {
     status: 'present'
   });
 
+  const loadData = async () => {
+    try {
+      const [attendanceData, studentsData] = await Promise.all([
+        getAttendance(),
+        getStudents()
+      ]);
+
+      setAttendance((Array.isArray(attendanceData) ? attendanceData : []) as AttendanceRecord[]);
+      setStudents((Array.isArray(studentsData) ? studentsData : []) as StudentOption[]);
+    } catch {
+      setAttendance([]);
+      setStudents([]);
+    }
+  };
+
   useEffect(() => {
-    setAttendance(getAttendance());
-    setStudents(getStudents());
+    loadData();
   }, []);
 
-  const handleMarkAttendance = () => {
+  const handleMarkAttendance = async () => {
     if (!formData.studentName) {
       alert('Please select a student');
       return;
     }
 
-    const attendanceRecords = getAttendance();
-    const newAttendance: Attendance = {
-      id: `attendance_${Date.now()}`,
+    const newAttendance = {
       studentName: formData.studentName,
       date: formData.date,
       status: formData.status,
       group: 'Not Assigned'
     };
 
-    saveAttendance([...attendanceRecords, newAttendance]);
-    setAttendance(getAttendance());
+    await addAttendance(newAttendance);
+    await loadData();
     setFormData({ studentName: '', date: new Date().toISOString().split('T')[0], status: 'present' });
     setShowMarkModal(false);
   };
@@ -57,6 +80,7 @@ export default function AttendancePage() {
       case 'present': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'absent': return <XCircle className="w-5 h-5 text-red-500" />;
       case 'late': return <Clock className="w-5 h-5 text-orange-500" />;
+      default: return <Clock className="w-5 h-5 text-gray-500" />;
     }
   };
 
@@ -65,6 +89,7 @@ export default function AttendancePage() {
       case 'present': return 'bg-green-100 text-green-700';
       case 'absent': return 'bg-red-100 text-red-700';
       case 'late': return 'bg-orange-100 text-orange-700';
+      default: return 'bg-gray-100 text-gray-700';
     }
   };
 
@@ -103,27 +128,37 @@ export default function AttendancePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {attendance.map((record, index) => (
+                  {(attendance || []).map((record, index: number) => (
                   <motion.tr key={record.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
                           <User className="w-5 h-5 text-white" />
                         </div>
-                        <span className="font-medium text-gray-900">{record.studentName}</span>
+                        <span className="font-medium text-gray-900">{record.studentName || record.studentId || 'Student'}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{record.date}</td>
+                    <td className="px-6 py-4 text-gray-600">{record.date ? new Date(record.date).toLocaleDateString() : '-'}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        {getStatusIcon(record.status)}
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
-                          {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                        {getStatusIcon(record.status || 'present')}
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status || 'present')}`}>
+                          {String(record.status || 'present').charAt(0).toUpperCase() + String(record.status || 'present').slice(1)}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <button onClick={() => { saveAttendance(getAttendance().filter(a => a.id !== record.id)); setAttendance(getAttendance()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
+                      <button
+                        onClick={async () => {
+                          await fetch(`/api/attendance?id=${encodeURIComponent(record.id)}`, {
+                            method: 'DELETE'
+                          });
+                          await loadData();
+                        }}
+                        className="text-red-600 hover:text-red-700 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </motion.tr>
                 ))}
@@ -142,7 +177,7 @@ export default function AttendancePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
                 <select value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none">
                   <option value="">Select student</option>
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <option key={student.id} value={student.fullName}>
                       {student.fullName}
                     </option>

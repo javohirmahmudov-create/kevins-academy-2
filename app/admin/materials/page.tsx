@@ -80,7 +80,7 @@ export default function MaterialsPage() {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody.details || errBody.error || 'Upload failed');
       }
-      const newMaterial = await res.json();
+      await res.json();
 
       // refresh list from storage (now backed by server)
       const allMaterials = await getMaterials();
@@ -158,8 +158,8 @@ export default function MaterialsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {dateMaterials.map((material: any, index: number) => (
                   <motion.div key={material.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                    <div className={`w-16 h-16 bg-gradient-to-br ${getColor(material.type)} rounded-2xl flex items-center justify-center mb-4 text-white`}>
-                      {getIcon(material.type)}
+                    <div className={`w-16 h-16 bg-gradient-to-br ${getColor(material.fileType || material.type)} rounded-2xl flex items-center justify-center mb-4 text-white`}>
+                      {getIcon(material.fileType || material.type)}
                     </div>
                     <h3 className="text-lg font-bold text-gray-900 mb-2">{material.title}</h3>
                     <div className="space-y-2 mb-4">
@@ -170,8 +170,20 @@ export default function MaterialsPage() {
                         </p>
                       )}
                     </div>
+                    {(material.fileType || material.type) === 'video' && material.fileUrl && (
+                      <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-black/5">
+                        <video
+                          src={material.fileUrl}
+                          controls
+                          playsInline
+                          width="100%"
+                          className="w-full h-auto max-h-72 object-contain"
+                          preload="metadata"
+                        />
+                      </div>
+                    )}
                     <div className="flex space-x-2">
-                      {material.fileUrl && (
+                      {(material.fileType || material.type) !== 'video' && material.fileUrl && (
                         <a
                           href={material.fileUrl}
                           download={material.title}

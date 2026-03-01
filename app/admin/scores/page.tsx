@@ -34,9 +34,25 @@ export default function ScoresPage() {
   const [groups, setGroups] = useState<any[]>([]);
 
   useEffect(() => {
-    setScores(getScores());
-    setStudents(getStudents());
-    setGroups(getGroups());
+    const loadData = async () => {
+      try {
+        const [scoresData, studentsData, groupsData] = await Promise.all([
+          getScores(),
+          getStudents(),
+          getGroups()
+        ]);
+
+        setScores(Array.isArray(scoresData) ? scoresData : []);
+        setStudents(Array.isArray(studentsData) ? studentsData : []);
+        setGroups(Array.isArray(groupsData) ? groupsData : []);
+      } catch {
+        setScores([]);
+        setStudents([]);
+        setGroups([]);
+      }
+    };
+
+    loadData();
   }, []);
 
   const [formData, setFormData] = useState<ScoreFormData>(createEmptyFormData());
@@ -64,33 +80,39 @@ export default function ScoresPage() {
     setSelectedStudent(student);
   };
 
-  const handleAddScore = () => {
+  const handleAddScore = async () => {
     if (!formData.studentName) {
       alert('Please select a student');
       return;
     }
 
-    const existingScores = getScores();
-    const { studentName, ...metrics } = formData;
-    const normalizedMetrics = Object.entries(metrics).reduce<Record<string, number>>((acc, [key, value]) => {
-      const numericValue = typeof value === 'number' ? value : Number(value);
-      if (!Number.isNaN(numericValue)) {
-        acc[key] = numericValue;
-      }
-      return acc;
-    }, {});
+    try {
+      const existingScores = await getScores();
+      const { studentName, ...metrics } = formData;
+      const normalizedMetrics = Object.entries(metrics).reduce<Record<string, number>>((acc, [key, value]) => {
+        const numericValue = typeof value === 'number' ? value : Number(value);
+        if (!Number.isNaN(numericValue)) {
+          acc[key] = numericValue;
+        }
+        return acc;
+      }, {});
 
-    const newScore: Score = {
-      id: `score_${Date.now()}`,
-      studentName,
-      createdAt: new Date().toISOString(),
-      ...normalizedMetrics
-    };
+      const newScore: Score = {
+        id: `score_${Date.now()}`,
+        studentName,
+        createdAt: new Date().toISOString(),
+        ...normalizedMetrics
+      };
 
-    saveScores([...existingScores, newScore]);
-    setScores(getScores());
-    setFormData(createEmptyFormData());
-    setShowAddModal(false);
+      await saveScores([...(existingScores || []), newScore]);
+      setScores(await getScores());
+      setFormData(createEmptyFormData());
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Score save error:', error);
+      setScores([]);
+      alert('Failed to save score');
+    }
   };
 
   const getAverage = (score: Score) => {
@@ -126,7 +148,7 @@ export default function ScoresPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-4">
-          {scores.map((score, index) => (
+          {(scores || []).map((score, index) => (
             <motion.div key={score.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
@@ -186,7 +208,7 @@ export default function ScoresPage() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
                 >
                   <option value="">Select student</option>
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <option key={student.id} value={student.fullName}>
                       {student.fullName} ({student.group})
                     </option>

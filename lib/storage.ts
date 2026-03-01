@@ -58,7 +58,14 @@ export const deleteAdmin = (id: string) =>
   apiFetch(`/api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ---- Groups ----------------------------------------------------------------
-export const getGroups = () => apiFetch('/api/groups');
+export const getGroups = async () => {
+  try {
+    const data = await apiFetch('/api/groups');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addGroup = (data: any) =>
   apiFetch('/api/groups', {
     method: 'POST',
@@ -75,7 +82,14 @@ export const deleteGroup = (id: string) =>
   apiFetch(`/api/groups?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ---- Students -------------------------------------------------------------
-export const getStudents = () => apiFetch('/api/students');
+export const getStudents = async () => {
+  try {
+    const data = await apiFetch('/api/students');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addStudent = (data: any) =>
   apiFetch('/api/students', {
     method: 'POST',
@@ -92,7 +106,14 @@ export const deleteStudent = (id: string) =>
   apiFetch(`/api/students?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ---- Parents --------------------------------------------------------------
-export const getParents = () => apiFetch('/api/parents');
+export const getParents = async () => {
+  try {
+    const data = await apiFetch('/api/parents');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addParent = (data: any) =>
   apiFetch('/api/parents', {
     method: 'POST',
@@ -101,7 +122,14 @@ export const addParent = (data: any) =>
   });
 
 // ---- Payments -------------------------------------------------------------
-export const getPayments = () => apiFetch('/api/payments');
+export const getPayments = async () => {
+  try {
+    const data = await apiFetch('/api/payments');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addPayment = (data: any) =>
   apiFetch('/api/payments', {
     method: 'POST',
@@ -110,7 +138,14 @@ export const addPayment = (data: any) =>
   });
 
 // ---- Attendance -----------------------------------------------------------
-export const getAttendance = () => apiFetch('/api/attendance');
+export const getAttendance = async () => {
+  try {
+    const data = await apiFetch('/api/attendance');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addAttendance = (data: any) =>
   apiFetch('/api/attendance', {
     method: 'POST',
@@ -119,7 +154,14 @@ export const addAttendance = (data: any) =>
   });
 
 // ---- Scores ---------------------------------------------------------------
-export const getScores = () => apiFetch('/api/scores');
+export const getScores = async () => {
+  try {
+    const data = await apiFetch('/api/scores');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addScore = (data: any) =>
   apiFetch('/api/scores', {
     method: 'POST',
@@ -128,7 +170,14 @@ export const addScore = (data: any) =>
   });
 
 // ---- Materials ------------------------------------------------------------
-export const getMaterials = () => apiFetch('/api/materials');
+export const getMaterials = async () => {
+  try {
+    const data = await apiFetch('/api/materials');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
 export const addMaterial = (data: any) =>
   apiFetch('/api/materials', {
     method: 'POST',

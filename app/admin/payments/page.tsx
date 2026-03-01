@@ -13,8 +13,22 @@ export default function PaymentsPage() {
   const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
-    setPayments(getPayments());
-    setStudents(getStudents());
+    const loadData = async () => {
+      try {
+        const [paymentsData, studentsData] = await Promise.all([
+          getPayments(),
+          getStudents()
+        ]);
+
+        setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+        setStudents(Array.isArray(studentsData) ? studentsData : []);
+      } catch {
+        setPayments([]);
+        setStudents([]);
+      }
+    };
+
+    loadData();
   }, []);
 
   const [formData, setFormData] = useState({
@@ -25,26 +39,32 @@ export default function PaymentsPage() {
     dueDate: new Date().toISOString().split('T')[0]
   });
 
-  const handleAddPayment = () => {
+  const handleAddPayment = async () => {
     if (!formData.studentName) {
       alert('Please select a student');
       return;
     }
 
-    const payments = getPayments();
-    const newPayment: Payment = {
-      id: `payment_${Date.now()}`,
-      studentName: formData.studentName,
-      amount: formData.amount,
-      month: formData.month,
-      status: formData.status,
-      dueDate: formData.dueDate
-    };
+    try {
+      const payments = await getPayments();
+      const newPayment: Payment = {
+        id: `payment_${Date.now()}`,
+        studentName: formData.studentName,
+        amount: formData.amount,
+        month: formData.month,
+        status: formData.status,
+        dueDate: formData.dueDate
+      };
 
-    savePayments([...payments, newPayment]);
-    setPayments(getPayments());
-    setFormData({ studentName: '', amount: 500000, month: 'October 2024', status: 'pending', dueDate: new Date().toISOString().split('T')[0] });
-    setShowAddModal(false);
+      await savePayments([...(payments || []), newPayment]);
+      setPayments(await getPayments());
+      setFormData({ studentName: '', amount: 500000, month: 'October 2024', status: 'pending', dueDate: new Date().toISOString().split('T')[0] });
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Payment save error:', error);
+      setPayments([]);
+      alert('Failed to save payment');
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -67,12 +87,17 @@ export default function PaymentsPage() {
     return new Intl.NumberFormat('uz-UZ', { style: 'currency', currency: 'UZS' }).format(amount);
   };
 
-  const togglePaymentStatus = (id: string) => {
-    const payment = payments.find(p => p.id === id);
-    if (payment) {
-      const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
-      savePayments(payments.map(p => p.id === id ? { ...p, status: newStatus as any } : p));
-      setPayments(getPayments());
+  const togglePaymentStatus = async (id: string) => {
+    try {
+      const payment = payments.find(p => p.id === id);
+      if (payment) {
+        const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
+        await savePayments((payments || []).map(p => p.id === id ? { ...p, status: newStatus as any } : p));
+        setPayments(await getPayments());
+      }
+    } catch (error) {
+      console.error('Payment status update error:', error);
+      setPayments([]);
     }
   };
 
@@ -113,7 +138,7 @@ export default function PaymentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {payments.map((payment, index) => (
+                {(payments || []).map((payment, index) => (
                   <motion.tr key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
@@ -139,7 +164,21 @@ export default function PaymentsPage() {
                         <button onClick={() => togglePaymentStatus(payment.id)} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
                           {payment.status === 'paid' ? 'Mark Unpaid' : 'Mark Paid'}
                         </button>
-                        <button onClick={() => { savePayments(getPayments().filter(p => p.id !== payment.id)); setPayments(getPayments()); }} className="text-red-600 hover:text-red-700 text-sm font-medium">Delete</button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const latestPayments = await getPayments();
+                              await savePayments((latestPayments || []).filter(p => p.id !== payment.id));
+                              setPayments(await getPayments());
+                            } catch (error) {
+                              console.error('Payment delete error:', error);
+                              setPayments([]);
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-700 text-sm font-medium"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </motion.tr>
@@ -156,7 +195,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Paid</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency((payments || []).filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0))}
                 </p>
               </div>
               <CheckCircle className="w-12 h-12 text-green-500" />
@@ -167,7 +206,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Pending</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {formatCurrency(payments.filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency((payments || []).filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0))}
                 </p>
               </div>
               <Clock className="w-12 h-12 text-orange-500" />
@@ -178,7 +217,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Overdue</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(payments.filter(p => p.status === 'overdue').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency((payments || []).filter(p => p.status === 'overdue').reduce((sum, p) => sum + p.amount, 0))}
                 </p>
               </div>
               <XCircle className="w-12 h-12 text-red-500" />
@@ -196,7 +235,7 @@ export default function PaymentsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
                 <select value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
                   <option value="">Select student</option>
-                  {students.map((student) => (
+                  {(students || []).map((student) => (
                     <option key={student.id} value={student.fullName}>
                       {student.fullName}
                     </option>

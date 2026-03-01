@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server'
+import { del, put } from '@vercel/blob'
 import prisma from '@/lib/prisma'
+
+function getBlobToken() {
+  const token = process.env.BLOB_READ_WRITE_TOKEN
+  if (!token) {
+    throw new Error('BLOB_READ_WRITE_TOKEN is not configured')
+  }
+  return token
+}
 
 
 export async function GET() {
@@ -25,19 +34,13 @@ export async function POST(request: Request) {
       data.uploadedBy = 'admin';
       const file = form.get('file') as File;
       if (file) {
-        const buf = Buffer.from(await file.arrayBuffer());
-        const filename = `${Date.now()}_${file.name}`;
-        // use /tmp in production since filesystem is read-only outside of /tmp on Vercel
-        const baseDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : process.cwd() + '/public/uploads';
-        await import('fs').then(fs => fs.mkdirSync(baseDir, { recursive: true }));
-        const path = `${baseDir}/${filename}`;
-        try {
-          await import('fs').then(fs => fs.writeFileSync(path, buf));
-        } catch (fsErr) {
-          console.error('failed to write file', fsErr);
-          throw new Error(`file save error: ${fsErr.message}`);
-        }
-        data.fileUrl = process.env.NODE_ENV === 'production' ? `/tmp/uploads/${filename}` : `/uploads/${filename}`;
+        const token = getBlobToken();
+        const safeName = file.name.replace(/\s+/g, '-');
+        const blob = await put(`materials/${Date.now()}-${safeName}`, file, {
+          access: 'public',
+          token
+        });
+        data.fileUrl = blob.url;
       }
       data.content = form.get('content') as string | null;
       const due = form.get('dueDate') as string;
@@ -93,12 +96,12 @@ export async function DELETE(request: Request) {
     const idNum = parseInt(id, 10);
     const existing = await prisma.material.findUnique({ where: { id: idNum } });
     if (existing && existing.fileUrl) {
-      // attempt to delete file from uploads
+      // attempt to delete file from Vercel Blob
       try {
-        const filePath = process.cwd() + '/public' + existing.fileUrl;
-        await import('fs').then(fs => {
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        });
+        if (existing.fileUrl.startsWith('http')) {
+          const token = getBlobToken();
+          await del(existing.fileUrl, { token });
+        }
       } catch (e) {
         console.warn('could not delete file', e);
       }

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Download, FileText, Video, Image as ImageIcon, File } from 'lucide-react';
 import { getDataForAdmin } from '@/lib/storage';
-import { getFile } from '@/lib/fileStorage';
 import { useApp } from '@/lib/app-context';
 
 export default function StudentLessonsPage() {
@@ -50,31 +49,6 @@ export default function StudentLessonsPage() {
       }
     })();
   }, [student]);
-
-  const handleDownload = async (material: any) => {
-    if (!material.fileUrl) return;
-
-    try {
-      const file = await getFile(material.fileUrl);
-      if (!file) {
-        alert('This material is not available on this device yet. Please contact your teacher to re-upload it.');
-        return;
-      }
-
-      const objectUrl = URL.createObjectURL(file);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = material.title || file.name || 'material';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch (error) {
-      console.error('Error opening material', error);
-      alert('Unable to open this material. Please try again.');
-    }
-  };
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -147,6 +121,7 @@ export default function StudentLessonsPage() {
                       text: 'Text Document',
                       file: material.fileType || material.type || 'File'
                     };
+                    const isVideo = type === 'video';
 
                     return (
                     <motion.div
@@ -168,13 +143,27 @@ export default function StudentLessonsPage() {
                           </p>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleDownload(material)}
-                        className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>Download</span>
-                      </button>
+                      {isVideo && material.fileUrl ? (
+                        <div className="overflow-hidden rounded-xl border border-gray-200 bg-black/5">
+                          <video
+                            src={material.fileUrl}
+                            controls
+                            playsInline
+                            width="100%"
+                            className="w-full h-auto max-h-72 object-contain"
+                            preload="metadata"
+                          />
+                        </div>
+                      ) : (
+                        <a
+                          href={material.fileUrl || '#'}
+                          download={material.title || 'material'}
+                          className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>Download</span>
+                        </a>
+                      )}
                     </motion.div>
                     );
                   })}

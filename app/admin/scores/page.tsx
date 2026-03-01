@@ -53,6 +53,7 @@ export default function ScoresPage() {
     maxScore: 100,
     examDate: new Date().toISOString().split('T')[0],
     examTime: '10:00',
+    comment: '',
     sections: {} as Record<string, number>,
   });
 
@@ -127,7 +128,8 @@ export default function ScoresPage() {
         return Number.isFinite(raw) && raw >= 0 && raw <= Number(formData.maxScore || 100);
       });
 
-    return hasStudent && validMaxScore && validMockDateTime && allSectionsValid;
+    const hasComment = formData.comment.trim().length > 0;
+    return hasStudent && validMaxScore && validMockDateTime && allSectionsValid && hasComment;
   })();
 
   const groupOptions = Array.from(new Set((students || []).map((student: any) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
@@ -166,6 +168,7 @@ export default function ScoresPage() {
         studentId: Number(formData.studentId),
         studentName: student?.fullName || '',
         subject: formData.scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment',
+        comment: formData.comment.trim(),
         value: Number(overallPercent),
         overallPercent: Number(overallPercent),
         level,
@@ -185,6 +188,7 @@ export default function ScoresPage() {
         maxScore: 100,
         examDate: new Date().toISOString().split('T')[0],
         examTime: '10:00',
+        comment: '',
         sections: {},
       });
       setShowAddModal(false);
@@ -263,6 +267,11 @@ export default function ScoresPage() {
                         <span className="text-xs text-gray-500">{new Date(score.examDateTime).toLocaleString()}</span>
                       )}
                     </div>
+                    {score.comment && (
+                      <p className="text-xs text-gray-600 mt-2 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 max-w-xl">
+                        {score.comment}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -423,6 +432,17 @@ export default function ScoresPage() {
                   <span className="text-sm font-medium text-gray-700">% Overall (auto)</span>
                   <span className="text-lg font-bold text-gray-900">{overallPercent}%</span>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('comment')} *</label>
+                  <textarea
+                    value={formData.comment}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, comment: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    rows={3}
+                    placeholder={t('score_comment_placeholder')}
+                  />
+                </div>
               </div>
             </div>
 
@@ -439,7 +459,7 @@ export default function ScoresPage() {
               </div>
               {!isFormValid && (
                 <p className="text-xs text-gray-500 mt-2">
-                  O‘quvchi, max score va barcha bo‘lim ballari to‘g‘ri kiritilganda qo‘shish tugmasi aktiv bo‘ladi.
+                  O‘quvchi, max score, barcha bo‘lim ballari va comment to‘g‘ri kiritilganda qo‘shish tugmasi aktiv bo‘ladi.
                 </p>
               )}
             </div>

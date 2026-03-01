@@ -62,6 +62,7 @@ export interface Score {
   studentId?: string;
   studentName?: string;
   subject?: string;
+  comment?: string;
   value?: number;
   adminId?: string;
   level?: string;

@@ -113,6 +113,7 @@ model Score {
   studentId Int?
   value     Float?
   subject   String?
+  comment   String?
   level     String?
   category  String?
   scoreType String   @default("weekly")

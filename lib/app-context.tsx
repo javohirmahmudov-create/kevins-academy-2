@@ -266,6 +266,7 @@ const translations = {
     'no_ranking_data': 'Reyting ma\'lumotlari hali yo\'q',
     'fullscreen': 'To\'liq ekran',
     'open_video': 'Videoni ochish',
+    'score_comment_placeholder': 'Ball bo\'yicha izoh yozing',
   },
   en: {
     'welcome': 'Welcome',
@@ -481,6 +482,7 @@ const translations = {
     'no_ranking_data': 'No ranking data yet',
     'fullscreen': 'Fullscreen',
     'open_video': 'Open Video',
+    'score_comment_placeholder': 'Write a comment about this score',
   }
 };
 

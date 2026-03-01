@@ -262,7 +262,7 @@ export default function ParentDashboard() {
         activities.push({
           type: 'score',
           title: 'Test Score Received',
-          description: `${(score as any).subject || 'Overall'}: ${average}%`,
+          description: `${(score as any).subject || 'Overall'}: ${average}%${(score as any).comment ? ` · ${(score as any).comment}` : ''}`,
           date: score.createdAt || new Date().toISOString(),
         });
       });

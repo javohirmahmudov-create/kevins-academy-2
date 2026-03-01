@@ -182,6 +182,7 @@ export async function POST(request: Request) {
         : calculateOverallPercent(breakdown, Number(body.value || 0))
 
     const examDateTime = scoreType === 'mock' ? buildExamDateTime(body) : null
+    const comment = typeof body.comment === 'string' ? body.comment.trim() : ''
 
     const score = await prisma.score.create({
       data: {
@@ -189,6 +190,7 @@ export async function POST(request: Request) {
         studentId,
         value: overallPercent,
         subject: body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment'),
+        comment: comment || null,
         level,
         category: body.category || 'overall',
         scoreType,
@@ -230,11 +232,13 @@ export async function PUT(request: Request) {
         : calculateOverallPercent(breakdown, Number(body.value || 0))
 
     const examDateTime = scoreType === 'mock' ? buildExamDateTime(body) : null
+    const comment = typeof body.comment === 'string' ? body.comment.trim() : ''
 
     const data = {
       studentId,
       value: overallPercent,
       subject: body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment'),
+      comment: comment || null,
       level,
       category: body.category || 'overall',
       scoreType,

@@ -163,6 +163,14 @@ export default function StudentScoresPage() {
                       })}
                     </div>
                   )}
+
+                  {score.comment && (
+                    <div className="pt-2">
+                      <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                        {score.comment}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}

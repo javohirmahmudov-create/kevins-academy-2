@@ -542,6 +542,39 @@ export default function ParentDashboard() {
           </motion.div>
         </div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Group Ranking</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Weekly Rank</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">
+                {ranking.weeklyRank > 0 ? `#${ranking.weeklyRank}` : 'N/A'}
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-2">
+                  / {ranking.totalInGroup || 0}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Mock Exam Rank</p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">
+                {ranking.mockRank > 0 ? `#${ranking.mockRank}` : 'N/A'}
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-2">
+                  / {ranking.totalInGroup || 0}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-xl bg-green-50 dark:bg-green-900/20 p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Group Size</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-300">{ranking.totalInGroup || 0}</p>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Skills Progress */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

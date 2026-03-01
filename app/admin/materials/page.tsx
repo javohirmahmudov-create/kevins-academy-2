@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
-import { getMaterials, getGroups, Material, Group } from '@/lib/storage';
+import { getMaterials, getGroups, addMaterial, Material, Group } from '@/lib/storage';
 import { upload } from '@vercel/blob/client';
 import { useApp } from '@/lib/app-context';
 
@@ -72,25 +72,16 @@ export default function MaterialsPage() {
         handleUploadUrl: '/api/materials/upload'
       });
 
-      const res = await fetch('/api/materials', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: formData.title,
-          fileType: formData.type,
-          group: formData.group,
-          dueDate: formData.dueDate || null,
-          uploadedAt: new Date().toISOString(),
-          uploadedBy: 'admin',
-          fileUrl: blob.url,
-          content: formData.content || null
-        })
+      await addMaterial({
+        title: formData.title,
+        fileType: formData.type,
+        group: formData.group,
+        dueDate: formData.dueDate || null,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: 'admin',
+        fileUrl: blob.url,
+        content: formData.content || null
       });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.details || errBody.error || 'Upload failed');
-      }
-      await res.json();
 
       // refresh list from storage (now backed by server)
       const allMaterials = await getMaterials();

@@ -28,7 +28,17 @@ export interface Payment { id: string; amount: number; studentId?: string; admin
 export interface Attendance { id: string; studentId?: string; date?: string; status?: string; adminId?: string }
 export interface Material { id: string; title: string; adminId?: string; dueDate?: string }
 export interface Score { id: string; studentId?: string; value?: number; adminId?: string }
-export interface Parent { id: string; adminId?: string }
+export interface Parent {
+  id: string;
+  fullName?: string;
+  username?: string;
+  password?: string;
+  email?: string;
+  phone?: string;
+  studentId?: string;
+  adminId?: string;
+  createdAt?: string;
+}
 
 // small wrapper to call our API
 async function apiFetch(path: string, opts: RequestInit = {}) {

@@ -51,12 +51,17 @@ export default function AdminManagement() {
     loadAdmins();
   }, [currentAdmin, router]);
 
-  const loadAdmins = () => {
-    const allAdmins = getAdmins();
-    setAdmins(allAdmins);
+  const loadAdmins = async () => {
+    try {
+      const allAdmins = await getAdmins();
+      setAdmins(Array.isArray(allAdmins) ? allAdmins : []);
+    } catch (error) {
+      console.error('Failed to load admins:', error);
+      setAdmins([]);
+    }
   };
 
-  const handleCreateAdmin = (e: React.FormEvent) => {
+  const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newAdmin.username || !newAdmin.password || !newAdmin.fullName || !newAdmin.email) {
@@ -65,10 +70,10 @@ export default function AdminManagement() {
     }
 
     try {
-      createAdmin(newAdmin);
+      await createAdmin(newAdmin);
       setNewAdmin({ username: '', password: '', fullName: '', email: '' });
       setShowCreateForm(false);
-      loadAdmins();
+      await loadAdmins();
       alert(t('admin_created_successfully'));
     } catch (error) {
       alert(t('error_creating_admin'));
@@ -85,7 +90,7 @@ export default function AdminManagement() {
     });
   };
 
-  const handleUpdateAdmin = (e: React.FormEvent) => {
+  const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!editingAdmin || !editForm.username || !editForm.password || !editForm.fullName || !editForm.email) {
@@ -94,30 +99,30 @@ export default function AdminManagement() {
     }
 
     try {
-      updateAdmin(editingAdmin.id, editForm);
+      await updateAdmin(String(editingAdmin.id), editForm);
       setEditingAdmin(null);
       setEditForm({ username: '', password: '', fullName: '', email: '' });
-      loadAdmins();
+      await loadAdmins();
       alert(t('admin_updated_successfully'));
     } catch (error) {
       alert(t('error_updating_admin'));
     }
   };
 
-  const handleDeleteAdmin = (adminId: string) => {
+  const handleDeleteAdmin = async (adminId: string | number) => {
     if (confirm(t('delete_admin_confirm'))) {
       try {
         // Admin va uning barcha ma'lumotlarini o'chirish
-        deleteAdmin(adminId);
+        await deleteAdmin(String(adminId));
 
         // Agar o'chirilgan admin joriy admin bo'lsa, logout qilish
-        if (currentAdmin?.id === adminId) {
+        if (String(currentAdmin?.id) === String(adminId)) {
           logoutAdmin();
           router.push('/');
           return;
         }
 
-        loadAdmins();
+        await loadAdmins();
         alert(t('admin_deleted_successfully'));
       } catch (error) {
         alert(t('error_deleting_admin'));

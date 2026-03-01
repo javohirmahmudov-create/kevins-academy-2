@@ -68,6 +68,16 @@ export interface Parent {
   createdAt?: string;
 }
 
+export interface Admin {
+  id: string | number;
+  username: string;
+  password: string;
+  fullName: string;
+  email: string;
+  isActive?: boolean;
+  createdAt: string;
+}
+
 // small wrapper to call our API
 async function apiFetch(path: string, opts: RequestInit = {}) {
   const res = await fetch(path, { credentials: 'include', ...opts });

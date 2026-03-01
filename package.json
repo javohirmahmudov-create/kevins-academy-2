@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
     "build": "prisma generate && (if [ \"$VERCEL\" = \"1\" ]; then echo 'Skipping Prisma migrations on Vercel build'; else (prisma migrate resolve --rolled-back 20260301071122_add_attendance_payment_metadata || true) && prisma migrate deploy; fi) && next build",
+    "migrate:resolve": "prisma migrate resolve --rolled-back 20260301071122_add_attendance_payment_metadata || true",
+    "migrate:deploy": "npm run migrate:resolve && prisma migrate deploy",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
     "seed": "ts-node --project tsconfig.node.json scripts/seed.ts"

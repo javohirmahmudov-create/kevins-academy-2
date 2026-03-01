@@ -69,6 +69,9 @@ getAdminByUsername(username)  // Calls getAdmins() → filters by username
 
 ## 🔄 Database Migration Steps
 
+> **Important:** Vercel build now intentionally skips Prisma migrations for reliability.  
+> Run migrations explicitly via CLI/CI before or after deployment using `npm run migrate:deploy`.
+
 ### Step 1: Add DATABASE_URL to Vercel
 
 1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
@@ -90,8 +93,8 @@ After DATABASE_URL is set on Vercel, execute from your terminal:
 # 1. Generate Prisma Client (auto-run on install, but good to be explicit)
 npx prisma generate
 
-# 2. Apply schema to your Vercel Postgres database
-npx prisma migrate deploy
+# 2. Apply migrations (includes safe resolve step used in this project)
+npm run migrate:deploy
 
 # Alternative: If you prefer schema push without migrations
 # npx prisma db push --accept-data-loss
@@ -139,6 +142,9 @@ npx prisma migrate dev --name migration_name
 
 # Apply existing migrations to database
 npx prisma migrate deploy
+
+# Project-safe deploy migration command (recommended for this repo)
+npm run migrate:deploy
 
 # Push schema directly (no migration files created)
 npx prisma db push

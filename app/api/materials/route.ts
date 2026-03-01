@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { del, put } from '@vercel/blob'
 import prisma from '@/lib/prisma'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
 function getBlobToken() {
   const token = process.env.BLOB_READ_WRITE_TOKEN
@@ -11,9 +12,13 @@ function getBlobToken() {
 }
 
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const materials = await prisma.material.findMany({ orderBy: { createdAt: 'desc' } })
+    const adminId = getAdminIdFromRequest(request)
+    const materials = await prisma.material.findMany({
+      where: adminId ? { adminId } : undefined,
+      orderBy: { createdAt: 'desc' }
+    })
     return NextResponse.json(materials)
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
@@ -22,6 +27,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const contentType = request.headers.get('content-type') || '';
     let data: any = {};
     if (contentType.includes('multipart/form-data')) {
@@ -30,6 +36,7 @@ export async function POST(request: Request) {
       data.title = form.get('title') as string;
       data.group = form.get('group') as string;
       data.fileType = form.get('type') as string;
+      data.adminId = adminId;
       data.uploadedAt = new Date();
       data.uploadedBy = 'admin';
       const file = form.get('file') as File;
@@ -50,6 +57,7 @@ export async function POST(request: Request) {
     } else {
       // assume JSON body (used by saveMaterials helper)
       data = await request.json();
+      data.adminId = adminId;
       if (data.dueDate) {
         // ensure Date object
         data.dueDate = new Date(data.dueDate);
@@ -71,12 +79,17 @@ export async function POST(request: Request) {
 // update an existing material (used by saveMaterials helper or manual edits)
 export async function PUT(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     const body = await request.json();
     if (body.dueDate) body.dueDate = new Date(body.dueDate);
     const idNum = parseInt(id, 10);
+    if (adminId) {
+      const owned = await prisma.material.findFirst({ where: { id: idNum, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
+    }
     // if fileUrl is being removed, consider deleting file on disk? not needed here
     const updated = await prisma.material.update({ where: { id: idNum }, data: body });
     return NextResponse.json(updated);
@@ -89,12 +102,16 @@ export async function PUT(request: Request) {
 // delete a material and its file
 export async function DELETE(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     // fetch record first to know file path
     const idNum = parseInt(id, 10);
     const existing = await prisma.material.findUnique({ where: { id: idNum } });
+    if (adminId && existing?.adminId !== adminId) {
+      return NextResponse.json({ error: 'Topilmadi' }, { status: 404 });
+    }
     if (existing && existing.fileUrl) {
       // attempt to delete file from Vercel Blob
       try {

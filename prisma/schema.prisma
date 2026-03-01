@@ -19,16 +19,20 @@ model Admin {
 model Group {
   id        Int       @id @default(autoincrement())
   name      String    @unique
+  adminId   Int?
   level     String?
   description String?
   teacher   String?
   schedule  String?
   maxStudents Int?
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }
 
 model Student {
   id        Int      @id @default(autoincrement())
+  adminId   Int?
   fullName  String
   email     String   @unique
   phone     String
@@ -39,18 +43,24 @@ model Student {
   payments  Payment[]
   attendance Attendance[]
   createdAt DateTime @default(now())
+
+  @@index([adminId])
 }
 
 model Parent {
   id        Int       @id @default(autoincrement())
+  adminId   Int?
   fullName  String
   email     String?
   phone     String?
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }
 
 model Payment {
   id        Int       @id @default(autoincrement())
+  adminId   Int?
   studentId Int?
   student   Student?  @relation(fields: [studentId], references: [id])
   studentName String?
@@ -64,20 +74,26 @@ model Payment {
   note      String?
   status    String?
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }
 
 model Attendance {
   id        Int       @id @default(autoincrement())
+  adminId   Int?
   studentId Int?
   student   Student?  @relation(fields: [studentId], references: [id])
   date      DateTime?
   status    String?
   note      String?
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }
 
 model Material {
   id        Int       @id @default(autoincrement())
+  adminId   Int?
   title     String
   content   String?
   fileUrl   String?
@@ -87,12 +103,17 @@ model Material {
   uploadedAt DateTime?
   dueDate   DateTime?   // optional deadline for material
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }
 
 model Score {
   id        Int       @id @default(autoincrement())
+  adminId   Int?
   studentId Int?
   value     Float?
   subject   String?
   createdAt DateTime  @default(now())
+
+  @@index([adminId])
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
 async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
   if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
@@ -15,9 +16,11 @@ async function resolveStudentId(input: { studentId?: string | number; studentNam
   return undefined
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const attendance = await prisma.attendance.findMany({
+      where: adminId ? { adminId } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
         student: {
@@ -42,6 +45,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const status = body.status || 'present'
     const note = typeof body.note === 'string' ? body.note.trim() : ''
 
@@ -52,6 +56,7 @@ export async function POST(request: Request) {
     const studentId = await resolveStudentId(body)
     const parsedDate = body.date ? new Date(body.date) : new Date()
     const data = {
+      adminId,
       date: parsedDate.toISOString(),
       status,
       note: note || null,
@@ -68,9 +73,15 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const id = String(body.id || '').trim()
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.attendance.findFirst({ where: { id: Number(id), adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     const studentId = await resolveStudentId(body)
@@ -100,11 +111,17 @@ export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
     const id = String(url.searchParams.get('id') || '').trim()
+    const adminId = getAdminIdFromRequest(request)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    await prisma.attendance.delete({ where: { id } })
+    if (adminId) {
+      const owned = await prisma.attendance.findFirst({ where: { id: Number(id), adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
+    }
+
+    await prisma.attendance.delete({ where: { id: Number(id) } })
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })

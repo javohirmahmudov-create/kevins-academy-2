@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -53,9 +54,11 @@ async function resolveStudentId(input: { studentId?: string | number; studentNam
   return null
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const payments = await prisma.payment.findMany({
+      where: adminId ? { adminId } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
         student: {
@@ -94,6 +97,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const studentId = await resolveStudentId(body)
     const status = body.status || 'pending'
     const dueDate = body.dueDate ? new Date(body.dueDate) : null
@@ -113,6 +117,7 @@ export async function POST(request: Request) {
 
     const payment = await prisma.payment.create({
       data: {
+        adminId,
         studentId,
         studentName: resolvedStudentName || null,
         amount: Number(body.amount) || 0,
@@ -135,9 +140,15 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const id = Number(body.id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.payment.findFirst({ where: { id, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     const studentId = await resolveStudentId(body)
@@ -184,8 +195,14 @@ export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
     const id = Number(url.searchParams.get('id'))
+    const adminId = getAdminIdFromRequest(request)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.payment.findFirst({ where: { id, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     await prisma.payment.delete({ where: { id } })

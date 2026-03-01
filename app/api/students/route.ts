@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const adminId = getAdminIdFromRequest(request)
     const students = await prisma.student.findMany({
+      where: adminId ? { adminId } : undefined,
       orderBy: { createdAt: 'desc' }
     })
     return NextResponse.json(students)
@@ -16,8 +19,10 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
+    const adminId = getAdminIdFromRequest(req)
     const student = await prisma.student.create({
       data: {
+        adminId,
         fullName: body.fullName || body.name || '',
         email: body.email || `${Date.now()}@test.com`,
         phone: body.phone || '',
@@ -41,10 +46,17 @@ export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const adminId = getAdminIdFromRequest(req)
     if (!id) return NextResponse.json({ error: 'ID topilmadi' }, { status: 400 });
 
+    const studentId = parseInt(id)
+    if (adminId) {
+      const owned = await prisma.student.findFirst({ where: { id: studentId, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
+    }
+
     await prisma.student.delete({
-      where: { id: parseInt(id) }
+      where: { id: studentId }
     });
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -58,9 +70,16 @@ export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, ...updateData } = body;
+    const adminId = getAdminIdFromRequest(req)
+    const studentId = parseInt(id)
+
+    if (adminId) {
+      const owned = await prisma.student.findFirst({ where: { id: studentId, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
+    }
 
     const updated = await prisma.student.update({
-      where: { id: parseInt(id) },
+      where: { id: studentId },
       data: {
         fullName: updateData.fullName || updateData.name,
         email: updateData.email,

@@ -2,6 +2,7 @@
 
 export interface Student {
   id: string;
+  adminId?: string | number;
   fullName: string;
   role?: 'student';
   password?: string;
@@ -15,6 +16,7 @@ export interface Student {
 
 export interface Group {
   id: string;
+  adminId?: string | number;
   name: string;
   level?: string;
   description?: string;
@@ -80,7 +82,22 @@ export interface Admin {
 
 // small wrapper to call our API
 async function apiFetch(path: string, opts: RequestInit = {}) {
-  const res = await fetch(path, { credentials: 'include', ...opts });
+  const headers = new Headers(opts.headers || {});
+  if (typeof window !== 'undefined') {
+    try {
+      const rawAdmin = localStorage.getItem('currentAdmin');
+      if (rawAdmin) {
+        const admin = JSON.parse(rawAdmin);
+        if (admin?.id !== undefined && admin?.id !== null) {
+          headers.set('x-admin-id', String(admin.id));
+        }
+      }
+    } catch {
+      // ignore malformed localStorage
+    }
+  }
+
+  const res = await fetch(path, { credentials: 'include', ...opts, headers });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `${res.status}`);

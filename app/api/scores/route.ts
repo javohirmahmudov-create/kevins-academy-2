@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
 async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
   if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
@@ -35,9 +36,13 @@ function extractScoreValueAndSubject(body: any) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const scores = await prisma.score.findMany({ orderBy: { createdAt: 'desc' } })
+    const adminId = getAdminIdFromRequest(request)
+    const scores = await prisma.score.findMany({
+      where: adminId ? { adminId } : undefined,
+      orderBy: { createdAt: 'desc' }
+    })
     if (!Array.isArray(scores) || scores.length === 0) {
       return NextResponse.json([])
     }
@@ -58,10 +63,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const studentId = await resolveStudentId(body)
     const normalized = extractScoreValueAndSubject(body)
     const score = await prisma.score.create({
       data: {
+        adminId,
         studentId,
         value: normalized.value,
         subject: normalized.subject
@@ -77,9 +84,15 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const id = Number(body.id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.score.findFirst({ where: { id, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     const studentId = await resolveStudentId(body)
@@ -101,9 +114,15 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
+    const adminId = getAdminIdFromRequest(request)
     const id = Number(url.searchParams.get('id'))
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.score.findFirst({ where: { id, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     await prisma.score.delete({ where: { id } })

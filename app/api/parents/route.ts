@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
+import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const parents = await prisma.parent.findMany({ orderBy: { createdAt: 'desc' } })
+    const adminId = getAdminIdFromRequest(request)
+    const parents = await prisma.parent.findMany({
+      where: adminId ? { adminId } : undefined,
+      orderBy: { createdAt: 'desc' }
+    })
     const mapped = Array.isArray(parents) ? parents.map(unpackParent) : []
     return NextResponse.json(mapped)
   } catch (error) {
@@ -15,6 +20,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const metadata = {
       username: body.username || undefined,
       password: body.password || undefined,
@@ -25,6 +31,7 @@ export async function POST(request: Request) {
 
     const parent = await prisma.parent.create({
       data: {
+        adminId,
         fullName: body.fullName || 'Parent',
         email: body.email || null,
         phone: hasMetadata ? encodeParentMetadata(metadata) : (body.phone || null)
@@ -39,6 +46,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
+    const adminId = getAdminIdFromRequest(request)
     const id = Number(body.id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -47,6 +55,9 @@ export async function PUT(request: Request) {
     const existing = await prisma.parent.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Parent not found' }, { status: 404 })
+    }
+    if (adminId && existing.adminId !== adminId) {
+      return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     const existingMeta = decodeParentMetadata(existing.phone)
@@ -78,8 +89,14 @@ export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
     const id = Number(url.searchParams.get('id'))
+    const adminId = getAdminIdFromRequest(request)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    if (adminId) {
+      const owned = await prisma.parent.findFirst({ where: { id, adminId } })
+      if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
     await prisma.parent.delete({ where: { id } })

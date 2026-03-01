@@ -17,8 +17,26 @@ function parseStartLinkCode(text: string) {
   return parts[1] || ''
 }
 
+export async function GET() {
+  const tokenConfigured = Boolean(process.env.TELEGRAM_BOT_TOKEN)
+  const parentPortalConfigured = Boolean(process.env.PARENT_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL)
+
+  return NextResponse.json({
+    ok: true,
+    service: 'telegram-webhook',
+    tokenConfigured,
+    parentPortalConfigured,
+    now: new Date().toISOString(),
+  })
+}
+
 export async function POST(request: Request) {
   try {
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      console.error('Telegram webhook: TELEGRAM_BOT_TOKEN is missing in environment')
+      return NextResponse.json({ ok: true, warning: 'missing_telegram_bot_token' })
+    }
+
     const body = await request.json()
     const message = body?.message || body?.edited_message
     const chatId = message?.chat?.id ? String(message.chat.id) : ''
@@ -32,19 +50,25 @@ export async function POST(request: Request) {
 
     const linkCode = parseStartLinkCode(text)
     if (!linkCode) {
-      await sendTelegramMessage({
+      const sent = await sendTelegramMessage({
         chatId,
         text: "👋 Kevin's Academy botiga xush kelibsiz!\n\nTelegram bog'lash uchun quyidagicha yozing:\n<code>/start +998901234567</code>",
       })
+      if (!sent.ok) {
+        console.error('Telegram webhook: failed sending welcome message', sent)
+      }
       return NextResponse.json({ ok: true })
     }
 
     const normalizedInputPhone = normalizePhoneForLinking(linkCode)
     if (!normalizedInputPhone) {
-      await sendTelegramMessage({
+      const sent = await sendTelegramMessage({
         chatId,
         text: "❌ Telefon raqami noto'g'ri formatda.\nMisol: <code>/start +998901234567</code>"
       })
+      if (!sent.ok) {
+        console.error('Telegram webhook: failed sending invalid-phone message', sent)
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -61,10 +85,13 @@ export async function POST(request: Request) {
     }
 
     if (!matchedParent) {
-      await sendTelegramMessage({
+      const sent = await sendTelegramMessage({
         chatId,
         text: "❌ Ushbu telefon raqami bo'yicha ota-ona topilmadi.\nIltimos, maktab administratori bilan bog'laning."
       })
+      if (!sent.ok) {
+        console.error('Telegram webhook: failed sending parent-not-found message', sent)
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -84,10 +111,13 @@ export async function POST(request: Request) {
       }
     })
 
-    await sendTelegramMessage({
+    const sent = await sendTelegramMessage({
       chatId,
       text: `✅ Telegram muvaffaqiyatli ulandi!\n\nHurmatli <b>${matchedParent.unpacked?.fullName || 'ota-ona'}</b>, endi sizga real-vaqtda bildirishnomalar yuboriladi.`,
     })
+    if (!sent.ok) {
+      console.error('Telegram webhook: failed sending success message', sent)
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

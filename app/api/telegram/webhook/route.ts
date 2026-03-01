@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     if (!linkCode) {
       const sent = await sendTelegramMessage({
         chatId,
-        text: "👋 Kevin's Academy botiga xush kelibsiz!\n\nTelegram bog'lash uchun quyidagicha yozing:\n<code>/start +998901234567</code>",
+        text: "👋 Kevin's Academy botiga xush kelibsiz!\n\nTelegram bog'lash uchun O'ZINGIZNING telefon raqamingiz bilan yozing:\n<code>/start +9989XXXXXXXX</code>\n\nMasalan: <code>/start +998954403969</code>",
       })
       if (!sent.ok) {
         console.error('Telegram webhook: failed sending welcome message', sent)

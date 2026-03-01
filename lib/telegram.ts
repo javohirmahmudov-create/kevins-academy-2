@@ -1,6 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api'
 import prisma from '@/lib/prisma'
-import { unpackParent } from '@/lib/utils/parentAuth'
+import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
 
 type SendTelegramMessageInput = {
   chatId: string
@@ -103,9 +103,41 @@ export async function findLinkedParentChatIds(input: { adminId?: number | null; 
   for (const parent of parents) {
     const unpacked = unpackParent(parent) as any
     const linkedStudentId = unpacked?.studentId ? Number(unpacked.studentId) : null
-    const chatId = unpacked?.telegramChatId ? String(unpacked.telegramChatId) : ''
-    if (linkedStudentId === input.studentId && chatId) {
-      chatIds.add(chatId)
+    if (linkedStudentId !== input.studentId) {
+      continue
+    }
+
+    const directChatId = unpacked?.telegramChatId ? String(unpacked.telegramChatId) : ''
+    if (directChatId) {
+      chatIds.add(directChatId)
+      continue
+    }
+
+    const autoLinkedChatId = await findTelegramChatIdByPhone(unpacked?.phone || parent.phone)
+    if (!autoLinkedChatId) {
+      continue
+    }
+
+    chatIds.add(autoLinkedChatId)
+
+    try {
+      const existingMeta = decodeParentMetadata(parent.phone)
+      const nextMetadata = {
+        username: unpacked?.username || existingMeta?.username,
+        password: unpacked?.password || existingMeta?.password,
+        studentId: unpacked?.studentId || existingMeta?.studentId,
+        phone: unpacked?.phone || existingMeta?.phone || parent.phone || undefined,
+        telegramChatId: autoLinkedChatId,
+      }
+
+      await prisma.parent.update({
+        where: { id: parent.id },
+        data: {
+          phone: encodeParentMetadata(nextMetadata),
+        }
+      })
+    } catch (error) {
+      console.warn('Parent telegram auto-link update skipped:', error)
     }
   }
 

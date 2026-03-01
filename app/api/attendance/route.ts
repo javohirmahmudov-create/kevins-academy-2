@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const id = String(body.id)
+    const id = Number(body.id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
@@ -68,7 +68,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
-    const id = String(url.searchParams.get('id'))
+    const id = Number(url.searchParams.get('id'))
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }

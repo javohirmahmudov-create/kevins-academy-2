@@ -13,7 +13,13 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const parent = await prisma.parent.create({ data: body })
+    const parent = await prisma.parent.create({
+      data: {
+        fullName: body.fullName || 'Parent',
+        email: body.email || null,
+        phone: body.phone || null
+      }
+    })
     return NextResponse.json(parent)
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
@@ -28,8 +34,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    const data = { ...body }
-    delete data.id
+    const data = {
+      fullName: body.fullName || undefined,
+      email: body.email || undefined,
+      phone: body.phone || undefined
+    }
+
     const parent = await prisma.parent.update({ where: { id }, data })
     return NextResponse.json(parent)
   } catch (error) {

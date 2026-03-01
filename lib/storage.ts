@@ -202,12 +202,36 @@ export const saveStudents = async (students: Student[]) => {
 };
 
 export const savePayments = async (payments: Payment[]) => {
-  await Promise.all(payments.map((p: any) => (p.id ? apiFetch(`/api/payments?id=${encodeURIComponent(p.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }) : addPayment(p))));
+  await Promise.all(
+    payments.map((p: any) => {
+      const idNum = Number(p?.id);
+      const hasNumericId = Number.isFinite(idNum) && String(p?.id).trim() !== '';
+      return hasNumericId
+        ? apiFetch(`/api/payments?id=${encodeURIComponent(String(p.id))}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...p, id: idNum })
+          })
+        : addPayment(p);
+    })
+  );
   return getPayments();
 };
 
 export const saveAttendance = async (attendance: Attendance[]) => {
-  await Promise.all(attendance.map((a: any) => (a.id ? apiFetch(`/api/attendance?id=${encodeURIComponent(a.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(a) }) : addAttendance(a))));
+  await Promise.all(
+    attendance.map((a: any) => {
+      const idNum = Number(a?.id);
+      const hasNumericId = Number.isFinite(idNum) && String(a?.id).trim() !== '';
+      return hasNumericId
+        ? apiFetch(`/api/attendance?id=${encodeURIComponent(String(a.id))}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...a, id: idNum })
+          })
+        : addAttendance(a);
+    })
+  );
   return getAttendance();
 };
 
@@ -217,12 +241,36 @@ export const saveMaterials = async (materials: Material[]) => {
 };
 
 export const saveScores = async (scores: Score[]) => {
-  await Promise.all(scores.map((s: any) => (s.id ? apiFetch(`/api/scores?id=${encodeURIComponent(s.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) }) : addScore(s))));
+  await Promise.all(
+    scores.map((s: any) => {
+      const idNum = Number(s?.id);
+      const hasNumericId = Number.isFinite(idNum) && String(s?.id).trim() !== '';
+      return hasNumericId
+        ? apiFetch(`/api/scores?id=${encodeURIComponent(String(s.id))}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...s, id: idNum })
+          })
+        : addScore(s);
+    })
+  );
   return getScores();
 };
 
 export const saveParents = async (parents: Parent[]) => {
-  await Promise.all(parents.map((p: any) => (p.id ? apiFetch(`/api/parents?id=${encodeURIComponent(p.id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) }) : addParent(p))));
+  await Promise.all(
+    parents.map((p: any) => {
+      const idNum = Number(p?.id);
+      const hasNumericId = Number.isFinite(idNum) && String(p?.id).trim() !== '';
+      return hasNumericId
+        ? apiFetch(`/api/parents?id=${encodeURIComponent(String(p.id))}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...p, id: idNum })
+          })
+        : addParent(p);
+    })
+  );
   return getParents();
 };
 

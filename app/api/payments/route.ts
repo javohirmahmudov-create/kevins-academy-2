@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
+async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
+  if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
+    const parsed = Number(input.studentId)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+
+  if (input.studentName) {
+    const student = await prisma.student.findFirst({ where: { fullName: input.studentName } })
+    return student?.id ?? null
+  }
+
+  return null
+}
+
 export async function GET() {
   try {
     const payments = await prisma.payment.findMany({ orderBy: { createdAt: 'desc' } })
@@ -13,7 +27,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const payment = await prisma.payment.create({ data: body })
+    const studentId = await resolveStudentId(body)
+    const payment = await prisma.payment.create({
+      data: {
+        studentId,
+        amount: Number(body.amount) || 0,
+        status: body.status || 'pending'
+      }
+    })
     return NextResponse.json(payment)
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
@@ -28,8 +49,13 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
-    const data = { ...body }
-    delete data.id
+    const studentId = await resolveStudentId(body)
+    const data = {
+      studentId,
+      amount: body.amount !== undefined ? Number(body.amount) : undefined,
+      status: body.status || undefined
+    }
+
     const payment = await prisma.payment.update({ where: { id }, data })
     return NextResponse.json(payment)
   } catch (error) {

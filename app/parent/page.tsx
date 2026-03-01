@@ -48,6 +48,16 @@ interface RankingSummary {
   totalInGroup: number;
 }
 
+interface LeaderboardRow {
+  studentId: string;
+  studentName: string;
+  weeklyRank: number;
+  weeklyScore: number;
+  mockRank: number;
+  mockScore: number;
+  isChild: boolean;
+}
+
 export default function ParentDashboard() {
   const router = useRouter();
   const { currentParent, logoutParent, t } = useApp();
@@ -56,6 +66,7 @@ export default function ParentDashboard() {
   const [skills, setSkills] = useState<SkillBreakdown[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [ranking, setRanking] = useState<RankingSummary>({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
+  const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [trendData, setTrendData] = useState<Array<Record<string, any>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +86,7 @@ export default function ParentDashboard() {
         setChildSummary(null);
         setSkills([]);
         setRecentActivity([]);
+        setLeaderboardRows([]);
         setError('Child record not found. Please contact the administrator.');
         return;
       }
@@ -89,7 +101,7 @@ export default function ParentDashboard() {
       const groupStudentIds = new Set(groupStudents.map((student) => String(student.id)));
       const groupScores = scores.filter((score) => groupStudentIds.has(String((score as any).studentId || '')));
 
-      const buildRankMap = (type: 'weekly' | 'mock') => {
+      const buildRanking = (type: 'weekly' | 'mock') => {
         const latestByStudent = new Map<string, number>();
         const rows = groupScores
           .filter((row: any) => (row.scoreType || 'weekly') === type)
@@ -102,26 +114,56 @@ export default function ParentDashboard() {
         });
 
         const ranked = groupStudents
-          .map((student) => ({ studentId: String(student.id), score: latestByStudent.get(String(student.id)) ?? 0 }))
+          .map((student) => ({
+            studentId: String(student.id),
+            studentName: student.fullName,
+            score: latestByStudent.get(String(student.id)) ?? 0
+          }))
           .sort((a, b) => b.score - a.score);
 
         let lastScore: number | null = null;
         let currentRank = 0;
-        const rankMap = new Map<string, number>();
 
-        ranked.forEach((item, index) => {
+        return ranked.map((item, index) => {
           if (lastScore === null || item.score < lastScore) {
             currentRank = index + 1;
             lastScore = item.score;
           }
-          rankMap.set(item.studentId, currentRank);
+          return {
+            ...item,
+            rank: currentRank,
+          };
         });
-
-        return rankMap;
       };
 
-      const weeklyRankMap = buildRankMap('weekly');
-      const mockRankMap = buildRankMap('mock');
+      const weeklyRanking = buildRanking('weekly');
+      const mockRanking = buildRanking('mock');
+      const weeklyRankMap = new Map(weeklyRanking.map((item) => [item.studentId, item.rank]));
+      const mockRankMap = new Map(mockRanking.map((item) => [item.studentId, item.rank]));
+      const weeklyScoreMap = new Map(weeklyRanking.map((item) => [item.studentId, item.score]));
+      const mockScoreMap = new Map(mockRanking.map((item) => [item.studentId, item.score]));
+
+      const rows: LeaderboardRow[] = groupStudents
+        .map((student) => {
+          const sid = String(student.id);
+          return {
+            studentId: sid,
+            studentName: student.fullName,
+            weeklyRank: weeklyRankMap.get(sid) || 0,
+            weeklyScore: Number(weeklyScoreMap.get(sid) || 0),
+            mockRank: mockRankMap.get(sid) || 0,
+            mockScore: Number(mockScoreMap.get(sid) || 0),
+            isChild: sid === String(child.id),
+          };
+        })
+        .sort((a, b) => {
+          if (a.weeklyRank === 0 && b.weeklyRank !== 0) return 1;
+          if (a.weeklyRank !== 0 && b.weeklyRank === 0) return -1;
+          if (a.weeklyRank !== b.weeklyRank) return a.weeklyRank - b.weeklyRank;
+          return a.studentName.localeCompare(b.studentName);
+        });
+
+      setLeaderboardRows(rows);
       setRanking({
         weeklyRank: weeklyRankMap.get(String(child.id)) || 0,
         mockRank: mockRankMap.get(String(child.id)) || 0,
@@ -258,6 +300,7 @@ export default function ParentDashboard() {
       setSkills([]);
       setRecentActivity([]);
       setRanking({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
+      setLeaderboardRows([]);
       setTrendData([]);
     } finally {
       setLoading(false);
@@ -573,6 +616,56 @@ export default function ParentDashboard() {
               <p className="text-2xl font-bold text-green-600 dark:text-green-300">{ranking.totalInGroup || 0}</p>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('group_leaderboard')}</h3>
+
+          {leaderboardRows.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('no_ranking_data')}</p>
+          ) : (
+            <div className="space-y-4">
+              {leaderboardRows.filter((row) => row.isChild).map((row) => (
+                <div
+                  key={`child-${row.studentId}`}
+                  className="rounded-xl border border-blue-200 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-4 py-3"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300 mb-2">
+                    {t('your_child_position')}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                    <p className="font-semibold text-gray-900 dark:text-white">{row.studentName}</p>
+                    <p className="text-gray-700 dark:text-gray-300">{t('weekly_rank')}: {row.weeklyRank > 0 ? `#${row.weeklyRank}` : t('not_available')}</p>
+                    <p className="text-gray-700 dark:text-gray-300">{t('mock_exam_rank')}: {row.mockRank > 0 ? `#${row.mockRank}` : t('not_available')}</p>
+                    <p className="text-gray-700 dark:text-gray-300">{t('weekly_score')}: {Math.round(row.weeklyScore)}% · {t('mock_score')}: {Math.round(row.mockScore)}%</p>
+                  </div>
+                </div>
+              ))}
+
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">{t('all_students_ranking')}</p>
+                <div className="space-y-2">
+                  {leaderboardRows.map((row) => (
+                    <div
+                      key={row.studentId}
+                      className={`grid grid-cols-1 md:grid-cols-5 gap-2 rounded-xl px-4 py-3 border ${row.isChild ? 'border-blue-300 dark:border-blue-700 bg-blue-50/60 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/30'}`}
+                    >
+                      <p className="font-medium text-gray-900 dark:text-white">{row.studentName}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{t('weekly_rank')}: {row.weeklyRank > 0 ? `#${row.weeklyRank}` : t('not_available')}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{t('mock_exam_rank')}: {row.mockRank > 0 ? `#${row.mockRank}` : t('not_available')}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{t('weekly_score')}: {Math.round(row.weeklyScore)}%</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{t('mock_score')}: {Math.round(row.mockScore)}%</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Skills Progress */}

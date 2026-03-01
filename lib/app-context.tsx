@@ -256,6 +256,14 @@ const translations = {
     'group_size': 'Guruh soni',
     'next_due': 'Keyingi to\'lov muddati',
     'not_available': 'Mavjud emas',
+    'group_leaderboard': 'Guruh reyting jadvali',
+    'your_child_position': 'Farzandingiz o\'rni',
+    'all_students_ranking': 'Barcha o\'quvchilar reytingi',
+    'student_name': 'O\'quvchi',
+    'weekly_score': 'Haftalik ball',
+    'mock_score': 'Mock ball',
+    'rank': 'O\'rin',
+    'no_ranking_data': 'Reyting ma\'lumotlari hali yo\'q',
   },
   en: {
     'welcome': 'Welcome',
@@ -461,6 +469,14 @@ const translations = {
     'group_size': 'Group Size',
     'next_due': 'Next due',
     'not_available': 'N/A',
+    'group_leaderboard': 'Group Leaderboard',
+    'your_child_position': 'Your Child Position',
+    'all_students_ranking': 'All Students Ranking',
+    'student_name': 'Student',
+    'weekly_score': 'Weekly Score',
+    'mock_score': 'Mock Score',
+    'rank': 'Rank',
+    'no_ranking_data': 'No ranking data yet',
   }
 };
 

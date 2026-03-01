@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && (prisma migrate resolve --rolled-back 20260301071122_add_attendance_payment_metadata || true) && prisma migrate deploy && next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
     "seed": "ts-node --project tsconfig.node.json scripts/seed.ts"

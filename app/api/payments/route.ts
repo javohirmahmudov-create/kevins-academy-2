@@ -86,8 +86,8 @@ export async function GET() {
     })
 
     return NextResponse.json(normalized)
-  } catch (error) {
-    return NextResponse.json([])
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
   }
 }
 
@@ -127,8 +127,8 @@ export async function POST(request: Request) {
       }
     })
     return NextResponse.json(payment)
-  } catch (error) {
-    return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
   }
 }
 
@@ -175,8 +175,8 @@ export async function PUT(request: Request) {
 
     const payment = await prisma.payment.update({ where: { id }, data })
     return NextResponse.json(payment)
-  } catch (error) {
-    return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
   }
 }
 
@@ -190,7 +190,7 @@ export async function DELETE(request: Request) {
 
     await prisma.payment.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
   }
 }

@@ -100,8 +100,8 @@ export default function PaymentsPage() {
       setShowAddModal(false);
     } catch (error) {
       console.error('Payment save error:', error);
-      setPayments([]);
-      alert('Failed to save payment');
+      const message = error instanceof Error ? error.message : 'Failed to save payment';
+      alert(message);
     }
   };
 

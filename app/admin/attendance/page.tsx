@@ -84,10 +84,15 @@ export default function AttendancePage() {
       group: 'Not Assigned'
     };
 
-    await addAttendance(newAttendance);
-    await loadData();
-    setFormData({ studentId: '', date: new Date().toISOString().split('T')[0], status: 'present', note: '' });
-    setShowMarkModal(false);
+    try {
+      await addAttendance(newAttendance);
+      await loadData();
+      setFormData({ studentId: '', date: new Date().toISOString().split('T')[0], status: 'present', note: '' });
+      setShowMarkModal(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to mark attendance';
+      alert(message);
+    }
   };
 
   const getStatusIcon = (status: string) => {

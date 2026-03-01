@@ -6,9 +6,11 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download } from 'lucide-react';
 import { getMaterials, getGroups, Material, Group } from '@/lib/storage';
 import { upload } from '@vercel/blob/client';
+import { useApp } from '@/lib/app-context';
 
 export default function MaterialsPage() {
   const router = useRouter();
+  const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -53,12 +55,12 @@ export default function MaterialsPage() {
 
   const handleAddMaterial = async () => {
     if (!formData.title || !formData.group) {
-      alert('Please fill in all fields');
+      alert(t('fill_required_fields'));
       return;
     }
 
     if (!selectedFile) {
-      alert('Please select a file to upload');
+      alert(t('please_select_file'));
       return;
     }
 
@@ -102,7 +104,7 @@ export default function MaterialsPage() {
       setUploading(false);
     } catch (error: any) {
       console.error('Upload error:', error);
-      alert('Error uploading file: ' + (error.message || error));
+      alert(`${t('error_uploading_file')}: ${error.message || error}`);
       setUploading(false);
     }
   };
@@ -135,13 +137,13 @@ export default function MaterialsPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Materials Management</h1>
-                <p className="text-sm text-gray-500">Upload and manage learning materials</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('materials_management')}</h1>
+                <p className="text-sm text-gray-500">{t('upload_manage_materials')}</p>
               </div>
             </div>
             <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-teal-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <Plus className="w-5 h-5" />
-              <span>Upload Material</span>
+              <span>{t('upload_material')}</span>
             </button>
           </div>
         </div>
@@ -171,7 +173,7 @@ export default function MaterialsPage() {
                     </div>
                     <h3 className="text-lg font-bold text-gray-900 mb-2">{material.title}</h3>
                     <div className="space-y-2 mb-4">
-                      <p className="text-sm text-gray-600">Group: {material.group}</p>
+                      <p className="text-sm text-gray-600">{t('group_label')}: {material.group}</p>
                       {material.content && (
                         <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2">
                           {material.content}
@@ -179,7 +181,7 @@ export default function MaterialsPage() {
                       )}
                       {material.dueDate && (
                         <p className="text-sm text-orange-600 font-medium">
-                          Due: {new Date(material.dueDate).toLocaleDateString()}
+                          {t('due_date')}: {new Date(material.dueDate).toLocaleDateString()}
                         </p>
                       )}
                     </div>
@@ -203,7 +205,7 @@ export default function MaterialsPage() {
                           className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
                         >
                           <Download className="w-4 h-4" />
-                          <span className="text-sm">Download</span>
+                          <span className="text-sm">{t('download')}</span>
                         </a>
                       )}
                       <button
@@ -221,7 +223,7 @@ export default function MaterialsPage() {
                         className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
                       >
                         <Trash2 className="w-4 h-4" />
-                        <span className="text-sm">Delete</span>
+                        <span className="text-sm">{t('delete')}</span>
                       </button>
                     </div>
                   </motion.div>
@@ -235,10 +237,10 @@ export default function MaterialsPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Upload Material</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('upload_material')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">File *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('file')} *</label>
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-green-500 transition-colors">
                   <input
                     type="file"
@@ -258,18 +260,18 @@ export default function MaterialsPage() {
                       ) : (
                         <>
                           <p className="text-sm text-gray-600">
-                            {formData.type === 'pdf' && 'Click to upload PDF'}
-                            {formData.type === 'video' && 'Click to upload Video'}
-                            {formData.type === 'image' && 'Click to upload Image'}
-                            {formData.type === 'text' && 'Click to upload Text'}
+                            {formData.type === 'pdf' && t('click_upload_pdf')}
+                            {formData.type === 'video' && t('click_upload_video')}
+                            {formData.type === 'image' && t('click_upload_image')}
+                            {formData.type === 'text' && t('click_upload_text')}
                           </p>
                           <p className="text-xs text-gray-400 mt-1">
-                            {formData.type === 'pdf' && 'PDF Documents'}
+                            {formData.type === 'pdf' && t('pdf_documents')}
                             {formData.type === 'video' && 'MP4, AVI, MOV'}
                             {formData.type === 'image' && 'JPG, PNG, GIF'}
                             {formData.type === 'text' && 'TXT, DOC, DOCX'}
                           </p>
-                          <p className="text-xs text-green-600 mt-1">✓ Any size supported</p>
+                          <p className="text-xs text-green-600 mt-1">✓ {t('any_size_supported')}</p>
                         </>
                       )}
                     </div>
@@ -277,22 +279,22 @@ export default function MaterialsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
-                <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none" placeholder="Material title" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('title')} *</label>
+                <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none" placeholder={t('material_title')} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Type *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('type')} *</label>
                 <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as any })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none">
-                  <option value="pdf">PDF Document</option>
-                  <option value="video">Video</option>
-                  <option value="image">Image</option>
-                  <option value="text">Text</option>
+                  <option value="pdf">{t('pdf_document')}</option>
+                  <option value="video">{t('video')}</option>
+                  <option value="image">{t('image')}</option>
+                  <option value="text">{t('text')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Group *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('group')} *</label>
                 <select value={formData.group} onChange={(e) => setFormData({ ...formData, group: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none">
-                  <option value="">Select group</option>
+                  <option value="">{t('select_group')}</option>
                   {groups.map((group) => (
                     <option key={group.id} value={group.name}>
                       {group.name}
@@ -301,17 +303,17 @@ export default function MaterialsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('due_date')} *</label>
                 <input 
                   type="date"
                   value={formData.dueDate}
                   onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">Deadline for students to complete this material</p>
+                <p className="text-xs text-gray-500 mt-1">{t('deadline_for_students')}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Comment / Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('comment_description')}</label>
                 <textarea
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
@@ -331,14 +333,14 @@ export default function MaterialsPage() {
                 className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50"
                 disabled={uploading}
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button 
                 onClick={handleAddMaterial} 
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:shadow-lg disabled:opacity-50"
                 disabled={uploading}
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading ? t('uploading') : t('upload')}
               </button>
             </div>
           </motion.div>

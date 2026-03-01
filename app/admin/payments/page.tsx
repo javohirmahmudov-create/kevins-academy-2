@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User } from 'lucide-react';
 import { getPayments, addPayment, getStudents, Payment } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 export default function PaymentsPage() {
   const router = useRouter();
+  const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -48,22 +50,22 @@ export default function PaymentsPage() {
 
   const handleAddPayment = async () => {
     if (!formData.studentId) {
-      alert('Please select a student');
+      alert(t('please_select_student'));
       return;
     }
 
     if (formData.status === 'paid' && !formData.paidAt) {
-      alert('Please set paid date');
+      alert(t('please_set_paid_date'));
       return;
     }
 
     if (!formData.startDate || !formData.endDate) {
-      alert('Please set payment start and end dates');
+      alert(t('please_set_payment_window'));
       return;
     }
 
     if (new Date(formData.startDate) > new Date(formData.endDate)) {
-      alert('Start date cannot be after end date');
+      alert(t('start_date_after_end'));
       return;
     }
 
@@ -100,7 +102,7 @@ export default function PaymentsPage() {
       setShowAddModal(false);
     } catch (error) {
       console.error('Payment save error:', error);
-      const message = error instanceof Error ? error.message : 'Failed to save payment';
+      const message = error instanceof Error ? error.message : t('failed_save_payment');
       alert(message);
     }
   };
@@ -133,7 +135,7 @@ export default function PaymentsPage() {
       if (payment) {
         const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
         const paidAtInput = newStatus === 'paid'
-          ? window.prompt('Paid date (YYYY-MM-DD)', new Date().toISOString().split('T')[0])
+          ? window.prompt(t('paid_date_prompt'), new Date().toISOString().split('T')[0])
           : null;
 
         if (newStatus === 'paid' && !paidAtInput) {
@@ -158,7 +160,7 @@ export default function PaymentsPage() {
   };
 
   const getStudentDisplayName = (payment: Payment) => {
-    return payment.studentName || (students || []).find((student) => String(student.id) === String(payment.studentId))?.fullName || 'Unknown student';
+    return payment.studentName || (students || []).find((student) => String(student.id) === String(payment.studentId))?.fullName || t('unknown_student');
   };
 
   const getStudentGroup = (payment: Payment) => {
@@ -191,13 +193,13 @@ export default function PaymentsPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Payment Management</h1>
-                <p className="text-sm text-gray-500">Track student payments</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('payment_management')}</h1>
+                <p className="text-sm text-gray-500">{t('track_student_payments')}</p>
               </div>
             </div>
             <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <DollarSign className="w-5 h-5" />
-              <span>Add Payment</span>
+              <span>{t('add_payment')}</span>
             </button>
           </div>
         </div>
@@ -210,16 +212,16 @@ export default function PaymentsPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-            placeholder="Search by student name"
+            placeholder={t('search_by_student_name')}
           />
           <select
             value={selectedGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
             className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
           >
-            <option value="">All groups</option>
+            <option value="">{t('all_groups')}</option>
             {groupOptions.map((group) => (
-              <option key={group} value={group}>{group}</option>
+              <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
             ))}
           </select>
         </div>
@@ -228,16 +230,16 @@ export default function PaymentsPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Student</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Group</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Base Amount</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Penalty</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Total Due</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Month</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Payment Window</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Paid At</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Actions</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('student')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('group')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('base_amount')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('penalty')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('total_due')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('month')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('payment_window')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('paid_at')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -255,7 +257,7 @@ export default function PaymentsPage() {
                         <span className="font-medium text-gray-900">{getStudentDisplayName(payment)}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{getStudentGroup(payment)}</td>
+                    <td className="px-6 py-4 text-gray-600">{getStudentGroup(payment) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(payment)}</td>
                     <td className="px-6 py-4 font-semibold text-gray-900">{formatCurrency(payment.amount)}</td>
                     <td className={`px-6 py-4 font-semibold ${Number(payment.penaltyAmount || 0) > 0 ? 'text-red-600' : 'text-gray-600'}`}>
                       {formatCurrency(Number(payment.penaltyAmount || 0))}
@@ -269,7 +271,7 @@ export default function PaymentsPage() {
                       {' - '}
                       {payment.endDate ? new Date(payment.endDate).toLocaleDateString() : (payment.dueDate ? new Date(payment.dueDate).toLocaleDateString() : '-')}
                       {(payment.warning || payment.isOverdue) && (
-                        <span className="block mt-1 text-xs text-red-600 font-medium">{payment.warning || 'Deadline passed. Penalty is increasing daily.'}</span>
+                        <span className="block mt-1 text-xs text-red-600 font-medium">{payment.warning || t('deadline_passed_warning')}</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-gray-600">{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : '-'}</td>
@@ -277,14 +279,14 @@ export default function PaymentsPage() {
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(displayStatus)}
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
-                          {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+                          {t(displayStatus)}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex space-x-2">
                         <button onClick={() => togglePaymentStatus(String(payment.id))} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
-                          {payment.status === 'paid' ? 'Mark Unpaid' : 'Mark Paid'}
+                          {payment.status === 'paid' ? t('mark_unpaid') : t('mark_paid')}
                         </button>
                         <button
                           onClick={async () => {
@@ -300,7 +302,7 @@ export default function PaymentsPage() {
                           }}
                           className="text-red-600 hover:text-red-700 text-sm font-medium"
                         >
-                          Delete
+                          {t('delete')}
                         </button>
                       </div>
                     </td>
@@ -319,7 +321,7 @@ export default function PaymentsPage() {
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Total Paid</p>
+                <p className="text-sm text-gray-600 mb-1">{t('total_paid')}</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(filteredPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
@@ -330,7 +332,7 @@ export default function PaymentsPage() {
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Pending</p>
+                <p className="text-sm text-gray-600 mb-1">{t('pending')}</p>
                 <p className="text-2xl font-bold text-orange-600">
                   {formatCurrency(filteredPayments.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
@@ -341,7 +343,7 @@ export default function PaymentsPage() {
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Overdue</p>
+                <p className="text-sm text-gray-600 mb-1">{t('overdue')}</p>
                 <p className="text-2xl font-bold text-red-600">
                   {formatCurrency(filteredPayments.filter(p => p.status === 'overdue' || p.isOverdue).reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
@@ -355,12 +357,12 @@ export default function PaymentsPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Add Payment Record</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('add_payment_record')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
                 <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
-                  <option value="">Select student</option>
+                  <option value="">{t('select_student')}</option>
                   {(students || []).map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.fullName}
@@ -369,27 +371,27 @@ export default function PaymentsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Amount (UZS) *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('amount_uzs')} *</label>
                 <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: parseInt(e.target.value) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Month *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('month')} *</label>
                 <input type="text" value={formData.month} onChange={(e) => setFormData({ ...formData, month: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" placeholder="October 2024" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Start Date *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_start_date')} *</label>
                 <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment End Date *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_end_date')} *</label>
                 <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value, dueDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Penalty Per Day (UZS) *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('penalty_per_day_uzs')} *</label>
                 <input type="number" min="0" value={formData.penaltyPerDay} onChange={(e) => setFormData({ ...formData, penaltyPerDay: parseInt(e.target.value || '0', 10) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('status')} *</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({
@@ -399,31 +401,31 @@ export default function PaymentsPage() {
                   })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
                 >
-                  <option value="pending">Pending</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
+                  <option value="pending">{t('pending')}</option>
+                  <option value="paid">{t('paid')}</option>
+                  <option value="overdue">{t('overdue')}</option>
                 </select>
               </div>
               {formData.status === 'paid' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Paid At *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('paid_at')} *</label>
                   <input type="date" value={formData.paidAt} onChange={(e) => setFormData({ ...formData, paidAt: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Note (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('note_optional')}</label>
                 <textarea
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-                  placeholder="Payment reminder or comment"
+                  placeholder={t('payment_reminder_or_comment')}
                   rows={3}
                 />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAddPayment} className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg">Add Payment</button>
+              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={handleAddPayment} className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg">{t('add_payment')}</button>
             </div>
           </motion.div>
         </div>

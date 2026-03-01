@@ -124,7 +124,7 @@ export default function AdminDashboard() {
               <ThemeLanguageToggle />
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{user.fullName}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Administrator</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('administrator')}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -178,7 +178,7 @@ export default function AdminDashboard() {
                 <item.icon className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{item.label}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Manage {item.label.toLowerCase()}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('manage')} {item.label.toLowerCase()}</p>
             </motion.button>
           ))}
         </div>
@@ -197,21 +197,21 @@ export default function AdminDashboard() {
               className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
             >
               <p className="font-semibold">{t('add_new_student')}</p>
-              <p className="text-sm opacity-90 mt-1">Create student account</p>
+              <p className="text-sm opacity-90 mt-1">{t('create_student_account')}</p>
             </button>
             <button
               onClick={() => router.push('/admin/groups')}
               className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
             >
               <p className="font-semibold">{t('create_group')}</p>
-              <p className="text-sm opacity-90 mt-1">Setup new class group</p>
+              <p className="text-sm opacity-90 mt-1">{t('setup_new_class_group')}</p>
             </button>
             <button
               onClick={() => router.push('/admin/materials')}
               className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 text-left transition-all"
             >
               <p className="font-semibold">{t('upload_material')}</p>
-              <p className="text-sm opacity-90 mt-1">Add learning resources</p>
+              <p className="text-sm opacity-90 mt-1">{t('add_learning_resources')}</p>
             </button>
           </div>
         </motion.div>

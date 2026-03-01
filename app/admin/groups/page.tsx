@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, BookOpen, Edit, Trash2 } from 'lucide-react';
 import { getGroups, getStudents, addGroup, updateGroup, deleteGroup, Group } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 type GroupLevel = 'Beginner' | 'Elementary' | 'Intermediate' | 'Advanced';
 type GroupWithCount = Group & { studentCount: number; level?: GroupLevel; description?: string };
 
 export default function GroupsPage() {
   const router = useRouter();
+  const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [groups, setGroups] = useState<GroupWithCount[]>([]);
@@ -45,7 +47,7 @@ export default function GroupsPage() {
 
   const handleAddGroup = async () => {
     if (!formData.name) {
-      alert('Please enter group name');
+      alert(t('please_enter_group_name'));
       return;
     }
 
@@ -77,7 +79,7 @@ export default function GroupsPage() {
 
   const handleUpdateGroup = async () => {
     if (!editingGroup || !formData.name) {
-      alert('Please enter group name');
+      alert(t('please_enter_group_name'));
       return;
     }
 
@@ -95,7 +97,7 @@ export default function GroupsPage() {
   };
 
   const handleDeleteGroup = async (id: string) => {
-    if (confirm('Are you sure you want to delete this group?')) {
+    if (confirm(t('delete_group_confirm'))) {
       await deleteGroup(id);
       await loadGroups();
     }
@@ -125,13 +127,13 @@ export default function GroupsPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Group Management</h1>
-                <p className="text-sm text-gray-500">Manage all groups</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('group_management')}</h1>
+                <p className="text-sm text-gray-500">{t('manage_all_groups')}</p>
               </div>
             </div>
             <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <Plus className="w-5 h-5" />
-              <span>Create Group</span>
+              <span>{t('create_group')}</span>
             </button>
           </div>
         </div>
@@ -165,7 +167,7 @@ export default function GroupsPage() {
                     className="flex items-center space-x-1 text-gray-600 cursor-pointer hover:text-purple-600"
                   >
                     <Users className="w-4 h-4" />
-                    <span className="text-sm font-medium">{group.studentCount || 0} students</span>
+                    <span className="text-sm font-medium">{group.studentCount || 0} {t('students_count')}</span>
                   </div>
                 </div>
               </div>
@@ -177,14 +179,14 @@ export default function GroupsPage() {
                   className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100"
                 >
                   <Edit className="w-4 h-4" />
-                  <span className="text-sm">Edit</span>
+                  <span className="text-sm">{t('edit')}</span>
                 </button>
                 <button 
                   onClick={() => handleDeleteGroup(group.id)} 
                   className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span className="text-sm">Delete</span>
+                  <span className="text-sm">{t('delete')}</span>
                 </button>
               </div>
             </motion.div>
@@ -195,14 +197,14 @@ export default function GroupsPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Create New Group</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('create_new_group')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Group Name *</label>
-                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g., Beginner A" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('group_name')} *</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" placeholder={t('group_name')} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Level *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('level')} *</label>
                 <select value={formData.level} onChange={(e) => setFormData({ ...formData, level: e.target.value as any })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none">
                   <option value="Beginner">Beginner</option>
                   <option value="Elementary">Elementary</option>
@@ -211,13 +213,13 @@ export default function GroupsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder="Brief description..." />
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('description')}</label>
+                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder={t('brief_description')} />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAddGroup} className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg">Create Group</button>
+              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={handleAddGroup} className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg">{t('create_group')}</button>
             </div>
           </motion.div>
         </div>
@@ -227,14 +229,14 @@ export default function GroupsPage() {
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Group</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('edit')} {t('group')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Group Name *</label>
-                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g., Beginner A" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('group_name')} *</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" placeholder={t('group_name')} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Level *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('level')} *</label>
                 <select value={formData.level} onChange={(e) => setFormData({ ...formData, level: e.target.value as any })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none">
                   <option value="Beginner">Beginner</option>
                   <option value="Elementary">Elementary</option>
@@ -243,13 +245,13 @@ export default function GroupsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder="Brief description..." />
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('description')}</label>
+                <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" rows={3} placeholder={t('brief_description')} />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => { setShowEditModal(false); setEditingGroup(null); setFormData({ name: '', level: 'Beginner', description: '' }); }} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">Cancel</button>
-              <button onClick={handleUpdateGroup} className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg">Update Group</button>
+              <button onClick={() => { setShowEditModal(false); setEditingGroup(null); setFormData({ name: '', level: 'Beginner', description: '' }); }} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={handleUpdateGroup} className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:shadow-lg">{t('update_group')}</button>
             </div>
           </motion.div>
         </div>

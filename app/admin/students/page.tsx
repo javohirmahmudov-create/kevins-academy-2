@@ -15,9 +15,11 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { getStudents, getGroups, addStudent, updateStudent, deleteStudent, Student } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 export default function StudentsPage() {
   const router = useRouter();
+  const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,7 +66,7 @@ export default function StudentsPage() {
   // --- O'QUVCHI QO'SHISH ---
   const handleAddStudent = async () => {
     if (!formData.fullName || !formData.email || !formData.username || !formData.password) {
-      alert('Iltimos, barcha majburiy maydonlarni to\'ldiring');
+      alert(t('fill_required_fields'));
       return;
     }
 
@@ -82,7 +84,7 @@ export default function StudentsPage() {
       setFormData({ fullName: '', email: '', phone: '', group: '', username: '', password: '' });
       setShowAddModal(false);
     } catch (err) {
-      alert("Saqlashda xato yuz berdi");
+      alert(t('save_error'));
     }
   };
 
@@ -102,7 +104,7 @@ export default function StudentsPage() {
 
   const handleUpdateStudent = async () => {
     if (!editingStudent || !formData.fullName || !formData.email) {
-      alert('Majburiy maydonlarni to\'ldiring');
+      alert(t('fill_required_fields'));
       return;
     }
 
@@ -120,18 +122,18 @@ export default function StudentsPage() {
       setShowEditModal(false);
       setEditingStudent(null);
     } catch (err) {
-      alert("Yangilashda xato");
+      alert(t('update_error'));
     }
   };
 
   // --- O'CHIRISH ---
   const handleDeleteStudent = async (id: string) => {
-    if (confirm('O\'quvchini o\'chirishga aminmisiz?')) {
+    if (confirm(t('delete_student_confirm'))) {
       try {
         await deleteStudent(id);
         await loadData();
       } catch (err) {
-        alert("O'chirishda xato");
+        alert(t('delete_error'));
       }
     }
   };
@@ -157,13 +159,13 @@ export default function StudentsPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Student Management</h1>
-                <p className="text-sm text-gray-500">Manage all students in Postgres DB</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('students_management')}</h1>
+                <p className="text-sm text-gray-500">{t('manage_all_students_db')}</p>
               </div>
             </div>
             <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <Plus className="w-5 h-5" />
-              <span>Add Student</span>
+              <span>{t('add_student')}</span>
             </button>
           </div>
         </div>
@@ -177,7 +179,7 @@ export default function StudentsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search students..."
+              placeholder={t('search_students')}
               className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -186,7 +188,7 @@ export default function StudentsPage() {
             onChange={(e) => setSelectedGroup(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
           >
-            <option value="">All groups</option>
+            <option value="">{t('all_groups')}</option>
             {groups.map((g: any) => (
               <option key={g.id} value={g.name}>{g.name}</option>
             ))}
@@ -229,10 +231,10 @@ export default function StudentsPage() {
                 </div>
                 <div className="flex space-x-2">
                   <button onClick={() => handleEditStudent(student)} className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors">
-                    <Edit className="w-4 h-4" /> <span className="text-sm">Edit</span>
+                    <Edit className="w-4 h-4" /> <span className="text-sm">{t('edit')}</span>
                   </button>
                   <button onClick={() => handleDeleteStudent(student.id)} className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-                    <Trash2 className="w-4 h-4" /> <span className="text-sm">Delete</span>
+                    <Trash2 className="w-4 h-4" /> <span className="text-sm">{t('delete')}</span>
                   </button>
                 </div>
               </motion.div>
@@ -249,25 +251,25 @@ export default function StudentsPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl"
           >
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Add New Student</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('add_new_student')}</h2>
             <div className="space-y-4">
               <input
                 type="text"
-                placeholder="Full Name"
+                placeholder={t('full_name')}
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="email"
-                placeholder="Email"
+                placeholder={t('email')}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="text"
-                placeholder="Phone"
+                placeholder={t('phone')}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -277,21 +279,21 @@ export default function StudentsPage() {
                 onChange={(e) => setFormData({ ...formData, group: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                <option value="">Select Group</option>
+                <option value="">{t('select_group')}</option>
                 {groups.map((g: any) => (
                   <option key={g.id} value={g.name}>{g.name}</option>
                 ))}
               </select>
               <input
                 type="text"
-                placeholder="Username"
+                placeholder={t('username')}
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="password"
-                placeholder="Password"
+                placeholder={t('password')}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -302,13 +304,13 @@ export default function StudentsPage() {
                 onClick={handleAddStudent}
                 className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 rounded-lg hover:shadow-lg transition-all"
               >
-                Add Student
+                {t('add_student')}
               </button>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-all"
               >
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </motion.div>
@@ -323,25 +325,25 @@ export default function StudentsPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl"
           >
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Student</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('edit')} {t('student')}</h2>
             <div className="space-y-4">
               <input
                 type="text"
-                placeholder="Full Name"
+                placeholder={t('full_name')}
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="email"
-                placeholder="Email"
+                placeholder={t('email')}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="text"
-                placeholder="Phone"
+                placeholder={t('phone')}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -351,21 +353,21 @@ export default function StudentsPage() {
                 onChange={(e) => setFormData({ ...formData, group: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               >
-                <option value="">Select Group</option>
+                <option value="">{t('select_group')}</option>
                 {groups.map((g: any) => (
                   <option key={g.id} value={g.name}>{g.name}</option>
                 ))}
               </select>
               <input
                 type="text"
-                placeholder="Username"
+                placeholder={t('username')}
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <input
                 type="password"
-                placeholder="Password (leave empty to keep current)"
+                placeholder={t('password_keep_current')}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -376,13 +378,13 @@ export default function StudentsPage() {
                 onClick={handleUpdateStudent}
                 className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white py-2 rounded-lg hover:shadow-lg transition-all"
               >
-                Update Student
+                {t('update_student')}
               </button>
               <button
                 onClick={() => setShowEditModal(false)}
                 className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition-all"
               >
-                Cancel
+                {t('cancel')}
               </button>
             </div>
           </motion.div>

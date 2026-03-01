@@ -60,7 +60,7 @@ export default function AdminManagement() {
     e.preventDefault();
 
     if (!newAdmin.username || !newAdmin.password || !newAdmin.fullName || !newAdmin.email) {
-      alert(t('Please fill all fields'));
+      alert(t('please_fill_all_fields'));
       return;
     }
 
@@ -69,9 +69,9 @@ export default function AdminManagement() {
       setNewAdmin({ username: '', password: '', fullName: '', email: '' });
       setShowCreateForm(false);
       loadAdmins();
-      alert(t('Admin created successfully'));
+      alert(t('admin_created_successfully'));
     } catch (error) {
-      alert(t('Error creating admin'));
+      alert(t('error_creating_admin'));
     }
   };
 
@@ -89,7 +89,7 @@ export default function AdminManagement() {
     e.preventDefault();
 
     if (!editingAdmin || !editForm.username || !editForm.password || !editForm.fullName || !editForm.email) {
-      alert(t('Please fill all fields'));
+      alert(t('please_fill_all_fields'));
       return;
     }
 
@@ -98,14 +98,14 @@ export default function AdminManagement() {
       setEditingAdmin(null);
       setEditForm({ username: '', password: '', fullName: '', email: '' });
       loadAdmins();
-      alert(t('Admin updated successfully'));
+      alert(t('admin_updated_successfully'));
     } catch (error) {
-      alert(t('Error updating admin'));
+      alert(t('error_updating_admin'));
     }
   };
 
   const handleDeleteAdmin = (adminId: string) => {
-    if (confirm(t('Are you sure you want to delete this admin?'))) {
+    if (confirm(t('delete_admin_confirm'))) {
       try {
         // Admin va uning barcha ma'lumotlarini o'chirish
         deleteAdmin(adminId);
@@ -118,9 +118,9 @@ export default function AdminManagement() {
         }
 
         loadAdmins();
-        alert(t('Admin deleted successfully'));
+        alert(t('admin_deleted_successfully'));
       } catch (error) {
-        alert(t('Error deleting admin'));
+        alert(t('error_deleting_admin'));
       }
     }
   };
@@ -139,8 +139,8 @@ export default function AdminManagement() {
           className="text-center"
         >
           <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
-          <p className="text-gray-600 dark:text-gray-400">Only super administrators can access this page.</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('access_denied')}</h2>
+          <p className="text-gray-600 dark:text-gray-400">{t('only_super_admin_access')}</p>
           <button
             onClick={() => router.push('/admin')}
             className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-colors"
@@ -170,7 +170,7 @@ export default function AdminManagement() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('admin_management')}</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Manage system administrators</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('manage_admins')}</p>
               </div>
             </div>
 
@@ -178,7 +178,7 @@ export default function AdminManagement() {
               <ThemeLanguageToggle />
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{currentAdmin.fullName}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Super Admin</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('super_admin')}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -439,8 +439,8 @@ export default function AdminManagement() {
         {admins.length === 0 && (
           <div className="text-center py-12">
             <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No administrators found</h3>
-            <p className="text-gray-600 dark:text-gray-400">Create your first admin account to get started.</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('no_administrators_found')}</h3>
+            <p className="text-gray-600 dark:text-gray-400">{t('create_first_admin')}</p>
           </div>
         )}
       </main>

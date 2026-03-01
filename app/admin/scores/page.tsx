@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, TrendingUp, User, Trash2 } from 'lucide-react';
 import { getScores, addScore, getStudents } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 export default function ScoresPage() {
   const router = useRouter();
+  const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
   const [scores, setScores] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -37,7 +39,7 @@ export default function ScoresPage() {
   const getStudentName = (score: any) => {
     if (score.studentName) return score.studentName;
     const student = students.find((s: any) => String(s.id) === String(score.studentId));
-    return student?.fullName || `Student #${score.studentId ?? 'Unknown'}`;
+    return student?.fullName || `${t('student')} #${score.studentId ?? t('unknown_student')}`;
   };
 
   const getStudentGroup = (score: any) => {
@@ -63,7 +65,7 @@ export default function ScoresPage() {
 
   const handleAddScore = async () => {
     if (!formData.studentId) {
-      alert('Please select a student');
+      alert(t('please_select_student'));
       return;
     }
 
@@ -82,12 +84,12 @@ export default function ScoresPage() {
       setShowAddModal(false);
     } catch (error) {
       console.error('Score save error:', error);
-      alert('Failed to save score');
+      alert(t('failed_save_score'));
     }
   };
 
   const handleDeleteScore = async (id: string | number) => {
-    if (!confirm('Delete this score?')) return;
+    if (!confirm(t('delete_score_confirm'))) return;
     await fetch(`/api/scores?id=${encodeURIComponent(String(id))}`, { method: 'DELETE' });
     await loadData();
   };
@@ -102,13 +104,13 @@ export default function ScoresPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Scores Management</h1>
-                <p className="text-sm text-gray-500">Track student performance</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('scores_management')}</h1>
+                <p className="text-sm text-gray-500">{t('track_student_performance')}</p>
               </div>
             </div>
             <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-2 rounded-xl hover:shadow-lg transition-all">
               <Plus className="w-5 h-5" />
-              <span>Add Score</span>
+              <span>{t('add_score')}</span>
             </button>
           </div>
         </div>
@@ -121,16 +123,16 @@ export default function ScoresPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
-            placeholder="Search by student name"
+            placeholder={t('search_by_student_name')}
           />
           <select
             value={selectedGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
           >
-            <option value="">All groups</option>
+            <option value="">{t('all_groups')}</option>
             {groupOptions.map((group) => (
-              <option key={group} value={group}>{group}</option>
+              <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
             ))}
           </select>
         </div>
@@ -144,7 +146,7 @@ export default function ScoresPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">{getStudentName(score)}</h3>
-                    <p className="text-sm text-gray-500">{getStudentGroup(score)} · {score.subject || 'overall'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-500">{getStudentGroup(score) === 'Not Assigned' ? t('not_assigned') : getStudentGroup(score)} · {score.subject || 'overall'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}</p>
                   </div>
                 </div>
 
@@ -169,26 +171,26 @@ export default function ScoresPage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-xl w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Add Student Score</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('add_student_score')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
                 <select
                   value={formData.studentId}
                   onChange={(e) => setFormData((prev) => ({ ...prev, studentId: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
                 >
-                  <option value="">Select student</option>
+                  <option value="">{t('select_student')}</option>
                   {students.map((student: any) => (
                     <option key={student.id} value={student.id}>
-                      {student.fullName} ({student.group || 'No group'})
+                      {student.fullName} ({student.group || t('no_group')})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('subject')}</label>
                 <input
                   type="text"
                   value={formData.subject}
@@ -199,7 +201,7 @@ export default function ScoresPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Score (0-100)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('score_range')}</label>
                 <input
                   type="number"
                   min="0"
@@ -212,8 +214,8 @@ export default function ScoresPage() {
             </div>
 
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">Cancel</button>
-              <button onClick={handleAddScore} className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg">Add Score</button>
+              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={handleAddScore} className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg">{t('add_score')}</button>
             </div>
           </motion.div>
         </div>

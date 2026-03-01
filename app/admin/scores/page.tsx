@@ -270,12 +270,19 @@ export default function ScoresPage() {
       </main>
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-xl w-full">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('add_student_score')}</h2>
-            <p className="text-sm text-gray-500 mb-6">Level-based scoring + MOCK EXAM support</p>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-2 sm:p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[94vh] overflow-hidden shadow-2xl flex flex-col"
+          >
+            <div className="px-5 sm:px-7 pt-5 sm:pt-7 pb-4 border-b border-gray-100">
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">{t('add_student_score')}</h2>
+              <p className="text-sm text-gray-500">Level-based scoring + MOCK EXAM support</p>
+            </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="px-5 sm:px-7 py-4 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3 mb-4">
               <button
                 onClick={() => setFormData((prev) => ({ ...prev, scoreType: 'weekly' }))}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border ${formData.scoreType === 'weekly' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300'}`}
@@ -288,123 +295,126 @@ export default function ScoresPage() {
               >
                 MOCK EXAM
               </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
-                <select
-                  value={formData.studentId}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, studentId: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
-                >
-                  <option value="">{t('select_student')}</option>
-                  {students.map((student: any) => (
-                    <option key={student.id} value={student.id}>
-                      {student.fullName} ({student.group || t('no_group')})
-                    </option>
-                  ))}
-                </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Level</label>
-                <input
-                  type="text"
-                  value={currentLevel}
-                  readOnly
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Max score (each section)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={formData.maxScore}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, maxScore: Number(e.target.value || 100) }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
-                />
-              </div>
-
-              {formData.scoreType === 'mock' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Mock Date</label>
-                    <input
-                      type="date"
-                      value={formData.examDate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, examDate: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Mock Time</label>
-                    <input
-                      type="time"
-                      value={formData.examTime}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, examTime: e.target.value }))}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
-                    />
-                  </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
+                  <select
+                    value={formData.studentId}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, studentId: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  >
+                    <option value="">{t('select_student')}</option>
+                    {students.map((student: any) => (
+                      <option key={student.id} value={student.id}>
+                        {student.fullName} ({student.group || t('no_group')})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
 
-              <div className="space-y-3">
-                {currentCategories.map((category) => {
-                  const currentValue = Number(formData.sections?.[category] || 0);
-                  return (
-                    <div key={category} className="rounded-xl border border-gray-200 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-sm font-medium text-gray-700">{CATEGORY_LABELS[category]}</label>
-                        <span className="text-sm text-gray-500">{currentValue}/{formData.maxScore}</span>
-                      </div>
-                      <div className="grid grid-cols-[1fr,88px] gap-3 items-center">
-                        <input
-                          type="range"
-                          min="0"
-                          max={Math.max(1, Number(formData.maxScore || 100))}
-                          value={currentValue}
-                          onChange={(e) => {
-                            const next = Number(e.target.value || 0);
-                            setFormData((prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, [category]: next },
-                            }));
-                          }}
-                          className="w-full accent-orange-500"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          max={Math.max(1, Number(formData.maxScore || 100))}
-                          value={currentValue}
-                          onChange={(e) => {
-                            const next = Number(e.target.value || 0);
-                            setFormData((prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, [category]: next },
-                            }));
-                          }}
-                          className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
-                        />
-                      </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Level</label>
+                  <input
+                    type="text"
+                    value={currentLevel}
+                    readOnly
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 text-gray-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max score (each section)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={formData.maxScore}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, maxScore: Number(e.target.value || 100) }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+
+                {formData.scoreType === 'mock' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Mock Date</label>
+                      <input
+                        type="date"
+                        value={formData.examDate}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, examDate: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                      />
                     </div>
-                  );
-                })}
-              </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Mock Time</label>
+                      <input
+                        type="time"
+                        value={formData.examTime}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, examTime: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
 
-              <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">% Overall (auto)</span>
-                <span className="text-lg font-bold text-gray-900">{overallPercent}%</span>
+                <div className="space-y-3">
+                  {currentCategories.map((category) => {
+                    const currentValue = Number(formData.sections?.[category] || 0);
+                    return (
+                      <div key={category} className="rounded-xl border border-gray-200 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-medium text-gray-700">{CATEGORY_LABELS[category]}</label>
+                          <span className="text-sm text-gray-500">{currentValue}/{formData.maxScore}</span>
+                        </div>
+                        <div className="grid grid-cols-[1fr,88px] gap-3 items-center">
+                          <input
+                            type="range"
+                            min="0"
+                            max={Math.max(1, Number(formData.maxScore || 100))}
+                            value={currentValue}
+                            onChange={(e) => {
+                              const next = Number(e.target.value || 0);
+                              setFormData((prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, [category]: next },
+                              }));
+                            }}
+                            className="w-full accent-orange-500"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            max={Math.max(1, Number(formData.maxScore || 100))}
+                            value={currentValue}
+                            onChange={(e) => {
+                              const next = Number(e.target.value || 0);
+                              setFormData((prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, [category]: next },
+                              }));
+                            }}
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">% Overall (auto)</span>
+                  <span className="text-lg font-bold text-gray-900">{overallPercent}%</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
-              <button onClick={handleAddScore} className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg">{t('add_score')}</button>
+            <div className="px-5 sm:px-7 py-4 border-t border-gray-100 bg-white sticky bottom-0">
+              <div className="flex space-x-3">
+                <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+                <button onClick={handleAddScore} className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-xl hover:shadow-lg">{t('add_score')}</button>
+              </div>
             </div>
           </motion.div>
         </div>

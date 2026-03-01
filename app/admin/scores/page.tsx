@@ -167,7 +167,7 @@ export default function ScoresPage() {
       await addScore({
         studentId: Number(formData.studentId),
         studentName: student?.fullName || '',
-        subject: formData.scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment',
+        subject: formData.scoreType === 'mock' ? 'MOCK imtihon' : 'Baholash',
         comment: formData.comment.trim(),
         value: Number(overallPercent),
         overallPercent: Number(overallPercent),

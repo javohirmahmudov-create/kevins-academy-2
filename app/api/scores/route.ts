@@ -1,13 +1,24 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
-import { buildParentPortalUrl, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
+import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
 import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
 
 type ScoreType = 'weekly' | 'mock'
 
 const BEGINNER_TRACK = ['vocabulary', 'grammar', 'translation', 'attendance']
 const ADVANCED_TRACK = ['listening', 'reading', 'speaking', 'writing']
+
+const CATEGORY_LABEL_UZ: Record<string, string> = {
+  vocabulary: 'Lug‘at',
+  grammar: 'Grammatika',
+  translation: 'Tarjima',
+  attendance: 'Davomat',
+  listening: 'Listening',
+  reading: 'Reading',
+  speaking: 'Speaking',
+  writing: 'Writing',
+}
 
 function normalizeLevel(rawLevel?: string | null) {
   const level = String(rawLevel || '').trim().toLowerCase()
@@ -102,13 +113,13 @@ function rankStudents(items: Array<{ studentId: number; studentName: string; sco
   })
 }
 
-async function getStudentRankInGroup(input: {
+async function getGroupRankingData(input: {
   adminId?: number | null
   studentId?: number | null
   group?: string | null
   scoreType: ScoreType
 }) {
-  if (!input.studentId || !input.group) return 0
+  if (!input.studentId || !input.group) return { rank: 0, leaderboard: [] as Array<{ rank: number; studentName: string; score: number }> }
 
   const students = await prisma.student.findMany({
     where: {
@@ -118,7 +129,7 @@ async function getStudentRankInGroup(input: {
     select: { id: true, fullName: true }
   })
 
-  if (!students.length) return 0
+  if (!students.length) return { rank: 0, leaderboard: [] as Array<{ rank: number; studentName: string; score: number }> }
 
   const studentIds = students.map((student) => student.id)
   const scoreRows = await prisma.score.findMany({
@@ -144,7 +155,14 @@ async function getStudentRankInGroup(input: {
     }))
   )
 
-  return ranked.find((item) => item.studentId === input.studentId)?.rank || 0
+  return {
+    rank: ranked.find((item) => item.studentId === input.studentId)?.rank || 0,
+    leaderboard: ranked.map((item) => ({
+      rank: item.rank,
+      studentName: item.studentName,
+      score: Number(item.score || 0),
+    })),
+  }
 }
 
 export async function GET(request: Request) {
@@ -236,7 +254,7 @@ export async function POST(request: Request) {
         adminId,
         studentId,
         value: overallPercent,
-        subject: body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment'),
+        subject: body.subject || (scoreType === 'mock' ? 'MOCK imtihon' : 'Baholash'),
         comment: comment || null,
         level,
         category: body.category || 'overall',
@@ -252,17 +270,50 @@ export async function POST(request: Request) {
 
     if (studentId) {
       const studentWithGroup = await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true, group: true } })
-      const rank = await getStudentRankInGroup({
+      const rankingData = await getGroupRankingData({
         adminId,
         studentId,
         group: studentWithGroup?.group,
         scoreType,
       })
 
-      const subject = body.subject || (scoreType === 'mock' ? 'MOCK EXAM' : 'Weekly Assessment')
+      const subject = body.subject || (scoreType === 'mock' ? 'MOCK imtihon' : 'Baholash')
       const scoreValue = Number(overallPercent || 0)
-      const text = `📊 <b>Yangi ball qo'shildi</b>\n\nFarzandingiz bugun <b>${subject}</b>dan <b>${scoreValue}%</b> ball (Level: <b>${level}</b>) oldi.\n🏅 Umumiy reytingi: <b>${rank || 0}-o'rin</b>.`
-      const smsText = `Kevin's Academy: ${subject} bo'yicha yangi ball ${scoreValue}%. Reyting: ${rank || 0}-o'rin.`
+      const scoreDate = formatTelegramDate(scoreType === 'mock' ? examDateTime : score.createdAt)
+      const breakdownRows = (breakdown && typeof breakdown === 'object')
+        ? Object.entries(breakdown as Record<string, any>)
+            .map(([key, value]) => {
+              const scorePart = Number((value as any)?.score ?? 0)
+              const maxPart = Number((value as any)?.maxScore ?? maxScore)
+              const percentPart = Number((value as any)?.percent ?? 0)
+              const label = CATEGORY_LABEL_UZ[key] || key
+              return `• <b>${label}</b>: ${scorePart}/${maxPart} (${percentPart}%)`
+            })
+        : []
+
+      const leaderboardText = rankingData.leaderboard.length
+        ? rankingData.leaderboard
+            .map((item) => `${item.rank}. ${item.studentName} — ${Number(item.score).toFixed(1)}%`)
+            .join('\n')
+        : 'Reyting ma’lumoti mavjud emas.'
+
+      const text = [
+        '📊 <b>Yangi ball qo‘shildi</b>',
+        '',
+        `👤 O‘quvchi: <b>${studentWithGroup?.fullName || student?.fullName || "O‘quvchi"}</b>`,
+        `📅 Sana: <b>${scoreDate}</b>`,
+        `🧭 Daraja: <b>${level}</b>`,
+        `📝 Baholash turi: <b>${subject}</b>`,
+        ...(breakdownRows.length ? ['', '<b>Bo‘limlar kesimi:</b>', ...breakdownRows] : []),
+        '',
+        `📈 Umumiy ball: <b>${scoreValue}%</b>`,
+        `🏅 Guruhdagi o‘rni: <b>${rankingData.rank || 0}-o‘rin</b>`,
+        '',
+        '<b>📋 Guruh reytingi:</b>',
+        leaderboardText,
+      ].join('\n')
+
+      const smsText = `Kevin's Academy: ${scoreDate} kuni ${subject} natijasi. Umumiy ball: ${scoreValue}%. Guruhdagi o‘rni: ${rankingData.rank || 0}-o‘rin.`
       const buttonUrl = buildParentPortalUrl()
 
       queueTelegramTask(async () => {

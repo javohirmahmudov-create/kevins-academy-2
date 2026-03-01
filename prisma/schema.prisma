@@ -36,6 +36,8 @@ model Student {
   password  String
   status    String   @default("active")
   group     String?
+  payments  Payment[]
+  attendance Attendance[]
   createdAt DateTime @default(now())
 }
 
@@ -50,7 +52,16 @@ model Parent {
 model Payment {
   id        Int       @id @default(autoincrement())
   studentId Int?
+  student   Student?  @relation(fields: [studentId], references: [id])
+  studentName String?
   amount    Float
+  month     String?
+  dueDate   DateTime?
+  startDate DateTime?
+  endDate   DateTime?
+  penaltyPerDay Int   @default(10000)
+  paidAt    DateTime?
+  note      String?
   status    String?
   createdAt DateTime  @default(now())
 }
@@ -58,8 +69,10 @@ model Payment {
 model Attendance {
   id        Int       @id @default(autoincrement())
   studentId Int?
+  student   Student?  @relation(fields: [studentId], references: [id])
   date      DateTime?
   status    String?
+  note      String?
   createdAt DateTime  @default(now())
 }
 

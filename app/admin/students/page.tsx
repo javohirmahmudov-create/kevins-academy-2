@@ -21,6 +21,7 @@ export default function StudentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -52,6 +53,12 @@ export default function StudentsPage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const groupFromQuery = params.get('group') || '';
+    setSelectedGroup(groupFromQuery);
   }, []);
 
   // --- O'QUVCHI QO'SHISH ---
@@ -129,10 +136,15 @@ export default function StudentsPage() {
     }
   };
 
-  const filteredStudents = students.filter(student =>
-    student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    const matchesSearch =
+      student.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesGroup = !selectedGroup || student.group === selectedGroup;
+
+    return matchesSearch && matchesGroup;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -158,7 +170,7 @@ export default function StudentsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -169,6 +181,16 @@ export default function StudentsPage() {
               className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
+          <select
+            value={selectedGroup}
+            onChange={(e) => setSelectedGroup(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="">All groups</option>
+            {groups.map((g: any) => (
+              <option key={g.id} value={g.name}>{g.name}</option>
+            ))}
+          </select>
         </div>
 
         {loading ? (

@@ -4,61 +4,99 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User } from 'lucide-react';
-import { getPayments, savePayments, getStudents, Payment } from '@/lib/storage';
+import { getPayments, addPayment, getStudents, Payment } from '@/lib/storage';
 
 export default function PaymentsPage() {
   const router = useRouter();
   const [showAddModal, setShowAddModal] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
+
+  const loadData = async () => {
+    try {
+      const [paymentsData, studentsData] = await Promise.all([
+        getPayments(),
+        getStudents()
+      ]);
+
+      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setStudents(Array.isArray(studentsData) ? studentsData : []);
+    } catch {
+      setPayments([]);
+      setStudents([]);
+    }
+  };
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [paymentsData, studentsData] = await Promise.all([
-          getPayments(),
-          getStudents()
-        ]);
-
-        setPayments(Array.isArray(paymentsData) ? paymentsData : []);
-        setStudents(Array.isArray(studentsData) ? studentsData : []);
-      } catch {
-        setPayments([]);
-        setStudents([]);
-      }
-    };
-
     loadData();
   }, []);
 
   const [formData, setFormData] = useState({
-    studentName: '',
+    studentId: '',
     amount: 500000,
     month: 'October 2024',
     status: 'pending' as const,
-    dueDate: new Date().toISOString().split('T')[0]
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    dueDate: new Date().toISOString().split('T')[0],
+    penaltyPerDay: 10000,
+    paidAt: new Date().toISOString().split('T')[0],
+    note: ''
   });
 
   const handleAddPayment = async () => {
-    if (!formData.studentName) {
+    if (!formData.studentId) {
       alert('Please select a student');
       return;
     }
 
+    if (formData.status === 'paid' && !formData.paidAt) {
+      alert('Please set paid date');
+      return;
+    }
+
+    if (!formData.startDate || !formData.endDate) {
+      alert('Please set payment start and end dates');
+      return;
+    }
+
+    if (new Date(formData.startDate) > new Date(formData.endDate)) {
+      alert('Start date cannot be after end date');
+      return;
+    }
+
+    const selectedStudent = (students || []).find((student) => String(student.id) === String(formData.studentId));
+
     try {
-      const payments = await getPayments();
-      const newPayment: Payment = {
-        id: `payment_${Date.now()}`,
-        studentName: formData.studentName,
+      await addPayment({
+        studentId: Number(formData.studentId),
+        studentName: selectedStudent?.fullName,
         amount: formData.amount,
         month: formData.month,
         status: formData.status,
-        dueDate: formData.dueDate
-      };
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        dueDate: formData.endDate,
+        penaltyPerDay: Number(formData.penaltyPerDay || 10000),
+        paidAt: formData.status === 'paid' ? formData.paidAt : null,
+        note: formData.note.trim() || null
+      });
 
-      await savePayments([...(payments || []), newPayment]);
-      setPayments(await getPayments());
-      setFormData({ studentName: '', amount: 500000, month: 'October 2024', status: 'pending', dueDate: new Date().toISOString().split('T')[0] });
+      await loadData();
+      setFormData({
+        studentId: '',
+        amount: 500000,
+        month: 'October 2024',
+        status: 'pending',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date().toISOString().split('T')[0],
+        penaltyPerDay: 10000,
+        paidAt: new Date().toISOString().split('T')[0],
+        note: ''
+      });
       setShowAddModal(false);
     } catch (error) {
       console.error('Payment save error:', error);
@@ -72,6 +110,7 @@ export default function PaymentsPage() {
       case 'paid': return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'pending': return <Clock className="w-5 h-5 text-orange-500" />;
       case 'overdue': return <XCircle className="w-5 h-5 text-red-500" />;
+      default: return <Clock className="w-5 h-5 text-gray-500" />;
     }
   };
 
@@ -80,6 +119,7 @@ export default function PaymentsPage() {
       case 'paid': return 'bg-green-100 text-green-700';
       case 'pending': return 'bg-orange-100 text-orange-700';
       case 'overdue': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
     }
   };
 
@@ -89,17 +129,57 @@ export default function PaymentsPage() {
 
   const togglePaymentStatus = async (id: string) => {
     try {
-      const payment = payments.find(p => p.id === id);
+      const payment = payments.find(p => String(p.id) === String(id));
       if (payment) {
         const newStatus = payment.status === 'paid' ? 'pending' : 'paid';
-        await savePayments((payments || []).map(p => p.id === id ? { ...p, status: newStatus as any } : p));
-        setPayments(await getPayments());
+        const paidAtInput = newStatus === 'paid'
+          ? window.prompt('Paid date (YYYY-MM-DD)', new Date().toISOString().split('T')[0])
+          : null;
+
+        if (newStatus === 'paid' && !paidAtInput) {
+          return;
+        }
+
+        await fetch('/api/payments', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: Number(payment.id),
+            status: newStatus,
+            paidAt: newStatus === 'paid' ? paidAtInput : null
+          })
+        });
+        await loadData();
       }
     } catch (error) {
       console.error('Payment status update error:', error);
       setPayments([]);
     }
   };
+
+  const getStudentDisplayName = (payment: Payment) => {
+    return payment.studentName || (students || []).find((student) => String(student.id) === String(payment.studentId))?.fullName || 'Unknown student';
+  };
+
+  const getStudentGroup = (payment: Payment) => {
+    return (students || []).find((student) => String(student.id) === String(payment.studentId))?.group || 'Not Assigned';
+  };
+
+  const groupOptions = Array.from(new Set((students || []).map((student) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
+
+  const filteredPayments = (payments || []).filter((payment) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch = !query || getStudentDisplayName(payment).toLowerCase().includes(query);
+    const matchesGroup = !selectedGroup || getStudentGroup(payment) === selectedGroup;
+    return matchesSearch && matchesGroup;
+  }).sort((a, b) => {
+    const groupA = getStudentGroup(a);
+    const groupB = getStudentGroup(b);
+    if (groupA !== groupB) return groupA.localeCompare(groupB);
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -124,52 +204,95 @@ export default function PaymentsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+            placeholder="Search by student name"
+          />
+          <select
+            value={selectedGroup}
+            onChange={(e) => setSelectedGroup(e.target.value)}
+            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+          >
+            <option value="">All groups</option>
+            {groupOptions.map((group) => (
+              <option key={group} value={group}>{group}</option>
+            ))}
+          </select>
+        </div>
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Student</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Amount</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Group</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Base Amount</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Penalty</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Total Due</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Month</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Due Date</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Payment Window</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Paid At</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {(payments || []).map((payment, index) => (
+                {filteredPayments.map((payment, index) => (
                   <motion.tr key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
+                    {(() => {
+                      const displayStatus = payment.isOverdue ? 'overdue' : String(payment.status || 'pending');
+                      return (
+                        <>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center">
                           <User className="w-5 h-5 text-white" />
                         </div>
-                        <span className="font-medium text-gray-900">{payment.studentName}</span>
+                        <span className="font-medium text-gray-900">{getStudentDisplayName(payment)}</span>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-gray-600">{getStudentGroup(payment)}</td>
                     <td className="px-6 py-4 font-semibold text-gray-900">{formatCurrency(payment.amount)}</td>
-                    <td className="px-6 py-4 text-gray-600">{payment.month}</td>
-                    <td className="px-6 py-4 text-gray-600">{payment.dueDate}</td>
+                    <td className={`px-6 py-4 font-semibold ${Number(payment.penaltyAmount || 0) > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                      {formatCurrency(Number(payment.penaltyAmount || 0))}
+                    </td>
+                    <td className={`px-6 py-4 font-semibold ${(payment.isOverdue || (payment.status === 'overdue')) ? 'text-red-600' : 'text-gray-900'}`}>
+                      {formatCurrency(Number(payment.totalDue || payment.amount || 0))}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{payment.month || '-'}</td>
+                    <td className="px-6 py-4 text-gray-600">
+                      {payment.startDate ? new Date(payment.startDate).toLocaleDateString() : '-'}
+                      {' - '}
+                      {payment.endDate ? new Date(payment.endDate).toLocaleDateString() : (payment.dueDate ? new Date(payment.dueDate).toLocaleDateString() : '-')}
+                      {(payment.warning || payment.isOverdue) && (
+                        <span className="block mt-1 text-xs text-red-600 font-medium">{payment.warning || 'Deadline passed. Penalty is increasing daily.'}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : '-'}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        {getStatusIcon(payment.status)}
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(payment.status)}`}>
-                          {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
+                        {getStatusIcon(displayStatus)}
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
+                          {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex space-x-2">
-                        <button onClick={() => togglePaymentStatus(payment.id)} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
+                        <button onClick={() => togglePaymentStatus(String(payment.id))} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
                           {payment.status === 'paid' ? 'Mark Unpaid' : 'Mark Paid'}
                         </button>
                         <button
                           onClick={async () => {
                             try {
-                              const latestPayments = await getPayments();
-                              await savePayments((latestPayments || []).filter(p => p.id !== payment.id));
-                              setPayments(await getPayments());
+                              await fetch(`/api/payments?id=${encodeURIComponent(String(payment.id))}`, {
+                                method: 'DELETE'
+                              });
+                              await loadData();
                             } catch (error) {
                               console.error('Payment delete error:', error);
                               setPayments([]);
@@ -181,6 +304,9 @@ export default function PaymentsPage() {
                         </button>
                       </div>
                     </td>
+                        </>
+                      );
+                    })()}
                   </motion.tr>
                 ))}
               </tbody>
@@ -195,7 +321,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Paid</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency((payments || []).filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency(filteredPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
               </div>
               <CheckCircle className="w-12 h-12 text-green-500" />
@@ -206,7 +332,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Pending</p>
                 <p className="text-2xl font-bold text-orange-600">
-                  {formatCurrency((payments || []).filter(p => p.status === 'pending').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency(filteredPayments.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
               </div>
               <Clock className="w-12 h-12 text-orange-500" />
@@ -217,7 +343,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Overdue</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency((payments || []).filter(p => p.status === 'overdue').reduce((sum, p) => sum + p.amount, 0))}
+                  {formatCurrency(filteredPayments.filter(p => p.status === 'overdue' || p.isOverdue).reduce((sum, p) => sum + Number(p.totalDue || p.amount || 0), 0))}
                 </p>
               </div>
               <XCircle className="w-12 h-12 text-red-500" />
@@ -233,10 +359,10 @@ export default function PaymentsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
-                <select value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
+                <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
                   <option value="">Select student</option>
                   {(students || []).map((student) => (
-                    <option key={student.id} value={student.fullName}>
+                    <option key={student.id} value={student.id}>
                       {student.fullName}
                     </option>
                   ))}
@@ -251,16 +377,48 @@ export default function PaymentsPage() {
                 <input type="text" value={formData.month} onChange={(e) => setFormData({ ...formData, month: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" placeholder="October 2024" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
-                <input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Start Date *</label>
+                <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment End Date *</label>
+                <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value, dueDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Penalty Per Day (UZS) *</label>
+                <input type="number" min="0" value={formData.penaltyPerDay} onChange={(e) => setFormData({ ...formData, penaltyPerDay: parseInt(e.target.value || '0', 10) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
-                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as any })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    status: e.target.value as any,
+                    paidAt: e.target.value === 'paid' ? formData.paidAt || new Date().toISOString().split('T')[0] : formData.paidAt
+                  })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                >
                   <option value="pending">Pending</option>
                   <option value="paid">Paid</option>
                   <option value="overdue">Overdue</option>
                 </select>
+              </div>
+              {formData.status === 'paid' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Paid At *</label>
+                  <input type="date" value={formData.paidAt} onChange={(e) => setFormData({ ...formData, paidAt: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Note (optional)</label>
+                <textarea
+                  value={formData.note}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                  placeholder="Payment reminder or comment"
+                  rows={3}
+                />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">

@@ -24,8 +24,36 @@ export interface Group {
   createdAt?: string;
 }
 
-export interface Payment { id: string; amount: number; studentId?: string; adminId?: string; createdAt?: string }
-export interface Attendance { id: string; studentId?: string; date?: string; status?: string; adminId?: string }
+export interface Payment {
+  id: string;
+  amount: number;
+  studentId?: string;
+  studentName?: string;
+  month?: string;
+  dueDate?: string;
+  startDate?: string;
+  endDate?: string;
+  penaltyPerDay?: number;
+  paidAt?: string;
+  note?: string;
+  status?: 'paid' | 'pending' | 'overdue' | string;
+  overdueDays?: number;
+  penaltyAmount?: number;
+  totalDue?: number;
+  isOverdue?: boolean;
+  warning?: string | null;
+  adminId?: string;
+  createdAt?: string;
+}
+export interface Attendance {
+  id: string;
+  studentId?: string;
+  studentName?: string;
+  date?: string;
+  status?: 'present' | 'absent' | 'late' | string;
+  note?: string;
+  adminId?: string;
+}
 export interface Material { id: string; title: string; adminId?: string; dueDate?: string; content?: string; fileUrl?: string; fileType?: string; group?: string; uploadedAt?: string }
 export interface Score { id: string; studentId?: string; studentName?: string; subject?: string; value?: number; adminId?: string; createdAt?: string }
 export interface Parent {

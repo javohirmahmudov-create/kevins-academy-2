@@ -17,8 +17,23 @@ async function resolveStudentId(input: { studentId?: string | number; studentNam
 
 export async function GET() {
   try {
-    const attendance = await prisma.attendance.findMany({ orderBy: { createdAt: 'desc' } })
-    return NextResponse.json(Array.isArray(attendance) ? attendance : [])
+    const attendance = await prisma.attendance.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        student: {
+          select: {
+            fullName: true
+          }
+        }
+      }
+    })
+
+    const normalized = (Array.isArray(attendance) ? attendance : []).map((item) => ({
+      ...item,
+      studentName: item.student?.fullName || undefined
+    }))
+
+    return NextResponse.json(normalized)
   } catch (error) {
     return NextResponse.json({ error: 'Xatolik' }, { status: 500 })
   }
@@ -27,11 +42,19 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+    const status = body.status || 'present'
+    const note = typeof body.note === 'string' ? body.note.trim() : ''
+
+    if (status === 'late' && !note) {
+      return NextResponse.json({ error: 'Kechikish sababi (comment) majburiy' }, { status: 400 })
+    }
+
     const studentId = await resolveStudentId(body)
     const parsedDate = body.date ? new Date(body.date) : new Date()
     const data = {
       date: parsedDate.toISOString(),
-      status: body.status || 'present',
+      status,
+      note: note || null,
       ...(studentId ? { studentId } : {})
     }
 
@@ -45,16 +68,24 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
-    const id = Number(body.id)
+    const id = String(body.id || '').trim()
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }
 
     const studentId = await resolveStudentId(body)
     const parsedDate = body.date ? new Date(body.date) : undefined
+    const status = body.status || undefined
+    const note = typeof body.note === 'string' ? body.note.trim() : undefined
+
+    if (status === 'late' && !note) {
+      return NextResponse.json({ error: 'Kechikish sababi (comment) majburiy' }, { status: 400 })
+    }
+
     const data = {
       date: parsedDate ? parsedDate.toISOString() : undefined,
-      status: body.status || undefined,
+      status,
+      note,
       ...(studentId ? { studentId } : {})
     }
 
@@ -68,7 +99,7 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const url = new URL(request.url)
-    const id = Number(url.searchParams.get('id'))
+    const id = String(url.searchParams.get('id') || '').trim()
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
     }

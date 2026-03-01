@@ -11,6 +11,8 @@ export default function ScoresPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [scores, setScores] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
   const [formData, setFormData] = useState({
     studentId: '',
     subject: 'overall',
@@ -37,6 +39,27 @@ export default function ScoresPage() {
     const student = students.find((s: any) => String(s.id) === String(score.studentId));
     return student?.fullName || `Student #${score.studentId ?? 'Unknown'}`;
   };
+
+  const getStudentGroup = (score: any) => {
+    const student = students.find((s: any) => String(s.id) === String(score.studentId));
+    return student?.group || 'Not Assigned';
+  };
+
+  const groupOptions = Array.from(new Set((students || []).map((student: any) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
+
+  const filteredScores = (scores || []).filter((score: any) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch = !query || getStudentName(score).toLowerCase().includes(query);
+    const matchesGroup = !selectedGroup || getStudentGroup(score) === selectedGroup;
+    return matchesSearch && matchesGroup;
+  }).sort((a: any, b: any) => {
+    const groupA = getStudentGroup(a);
+    const groupB = getStudentGroup(b);
+    if (groupA !== groupB) return groupA.localeCompare(groupB);
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   const handleAddScore = async () => {
     if (!formData.studentId) {
@@ -92,8 +115,27 @@ export default function ScoresPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+            placeholder="Search by student name"
+          />
+          <select
+            value={selectedGroup}
+            onChange={(e) => setSelectedGroup(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+          >
+            <option value="">All groups</option>
+            {groupOptions.map((group) => (
+              <option key={group} value={group}>{group}</option>
+            ))}
+          </select>
+        </div>
         <div className="space-y-4">
-          {(scores || []).map((score, index) => (
+          {filteredScores.map((score, index) => (
             <motion.div key={score.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -102,7 +144,7 @@ export default function ScoresPage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-gray-900">{getStudentName(score)}</h3>
-                    <p className="text-sm text-gray-500">{score.subject || 'overall'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-500">{getStudentGroup(score)} · {score.subject || 'overall'} · {new Date(score.createdAt || Date.now()).toLocaleDateString()}</p>
                   </div>
                 </div>
 

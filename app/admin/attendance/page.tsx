@@ -9,17 +9,19 @@ import { getAttendance, addAttendance, getStudents } from '@/lib/storage';
 type AttendanceStatus = 'present' | 'absent' | 'late';
 
 interface AttendanceRecord {
-  id: string;
+  id: string | number;
   studentName?: string;
   studentId?: string | number;
   date?: string;
   status?: AttendanceStatus | string;
+  note?: string;
   group?: string;
 }
 
 interface StudentOption {
   id: string | number;
   fullName: string;
+  group?: string;
 }
 
 export default function AttendancePage() {
@@ -27,14 +29,18 @@ export default function AttendancePage() {
   const [showMarkModal, setShowMarkModal] = useState(false);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<StudentOption[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGroup, setSelectedGroup] = useState('');
   const [formData, setFormData] = useState<{
-    studentName: string;
+    studentId: string;
     date: string;
     status: 'present' | 'absent' | 'late';
+    note: string;
   }>({
-    studentName: '',
+    studentId: '',
     date: new Date().toISOString().split('T')[0],
-    status: 'present'
+    status: 'present',
+    note: ''
   });
 
   const loadData = async () => {
@@ -57,21 +63,30 @@ export default function AttendancePage() {
   }, []);
 
   const handleMarkAttendance = async () => {
-    if (!formData.studentName) {
+    if (!formData.studentId) {
       alert('Please select a student');
       return;
     }
 
+    if (formData.status === 'late' && !formData.note.trim()) {
+      alert('Please add a comment for why the student was late');
+      return;
+    }
+
+    const selectedStudent = (students || []).find((student) => String(student.id) === String(formData.studentId));
+
     const newAttendance = {
-      studentName: formData.studentName,
+      studentId: Number(formData.studentId),
+      studentName: selectedStudent?.fullName,
       date: formData.date,
       status: formData.status,
+      note: formData.note.trim() || undefined,
       group: 'Not Assigned'
     };
 
     await addAttendance(newAttendance);
     await loadData();
-    setFormData({ studentName: '', date: new Date().toISOString().split('T')[0], status: 'present' });
+    setFormData({ studentId: '', date: new Date().toISOString().split('T')[0], status: 'present', note: '' });
     setShowMarkModal(false);
   };
 
@@ -92,6 +107,30 @@ export default function AttendancePage() {
       default: return 'bg-gray-100 text-gray-700';
     }
   };
+
+  const getStudentDisplayName = (record: AttendanceRecord) => {
+    return record.studentName || (students || []).find((student) => String(student.id) === String(record.studentId))?.fullName || `ID: ${record.studentId || '-'}`;
+  };
+
+  const getStudentGroup = (record: AttendanceRecord) => {
+    return (students || []).find((student) => String(student.id) === String(record.studentId))?.group || 'Not Assigned';
+  };
+
+  const groupOptions = Array.from(new Set((students || []).map((student) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
+
+  const filteredAttendance = (attendance || []).filter((record) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch = !query || getStudentDisplayName(record).toLowerCase().includes(query);
+    const matchesGroup = !selectedGroup || getStudentGroup(record) === selectedGroup;
+    return matchesSearch && matchesGroup;
+  }).sort((a, b) => {
+    const groupA = getStudentGroup(a);
+    const groupB = getStudentGroup(b);
+    if (groupA !== groupB) return groupA.localeCompare(groupB);
+    const dateA = a.date ? new Date(a.date).getTime() : 0;
+    const dateB = b.date ? new Date(b.date).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -116,28 +155,50 @@ export default function AttendancePage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none"
+            placeholder="Search by student name"
+          />
+          <select
+            value={selectedGroup}
+            onChange={(e) => setSelectedGroup(e.target.value)}
+            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none"
+          >
+            <option value="">All groups</option>
+            {groupOptions.map((group) => (
+              <option key={group} value={group}>{group}</option>
+            ))}
+          </select>
+        </div>
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Student</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Group</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Date</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Comment</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                  {(attendance || []).map((record, index: number) => (
+                  {filteredAttendance.map((record, index: number) => (
                   <motion.tr key={record.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center">
                           <User className="w-5 h-5 text-white" />
                         </div>
-                        <span className="font-medium text-gray-900">{record.studentName || record.studentId || 'Student'}</span>
+                        <span className="font-medium text-gray-900">{getStudentDisplayName(record)}</span>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-gray-600">{getStudentGroup(record)}</td>
                     <td className="px-6 py-4 text-gray-600">{record.date ? new Date(record.date).toLocaleDateString() : '-'}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
@@ -147,10 +208,11 @@ export default function AttendancePage() {
                         </span>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-gray-600">{record.note || '-'}</td>
                     <td className="px-6 py-4">
                       <button
                         onClick={async () => {
-                          await fetch(`/api/attendance?id=${encodeURIComponent(record.id)}`, {
+                          await fetch(`/api/attendance?id=${encodeURIComponent(String(record.id))}`, {
                             method: 'DELETE'
                           });
                           await loadData();
@@ -175,10 +237,10 @@ export default function AttendancePage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Student *</label>
-                <select value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none">
+                <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none">
                   <option value="">Select student</option>
                   {(students || []).map((student) => (
-                    <option key={student.id} value={student.fullName}>
+                    <option key={student.id} value={student.id}>
                       {student.fullName}
                     </option>
                   ))}
@@ -200,6 +262,18 @@ export default function AttendancePage() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Comment {formData.status === 'late' ? '*' : '(optional)'}
+                </label>
+                <textarea
+                  value={formData.note}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none"
+                  placeholder={formData.status === 'late' ? 'Why was the student late?' : 'Optional note'}
+                  rows={3}
+                />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">

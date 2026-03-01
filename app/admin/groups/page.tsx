@@ -6,12 +6,15 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Users, BookOpen, Edit, Trash2 } from 'lucide-react';
 import { getGroups, getStudents, addGroup, updateGroup, deleteGroup, Group } from '@/lib/storage';
 
+type GroupLevel = 'Beginner' | 'Elementary' | 'Intermediate' | 'Advanced';
+type GroupWithCount = Group & { studentCount: number; level?: GroupLevel; description?: string };
+
 export default function GroupsPage() {
   const router = useRouter();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [groups, setGroups] = useState<GroupWithCount[]>([]);
+  const [editingGroup, setEditingGroup] = useState<GroupWithCount | null>(null);
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -62,12 +65,12 @@ export default function GroupsPage() {
     setShowAddModal(false);
   };
 
-  const handleEditGroup = (group: Group) => {
+  const handleEditGroup = (group: GroupWithCount) => {
     setEditingGroup(group);
     setFormData({
       name: group.name,
       level: group.level as any,
-      description: group.description
+      description: group.description || ''
     });
     setShowEditModal(true);
   };
@@ -98,11 +101,18 @@ export default function GroupsPage() {
     }
   };
 
-  const levelColors = {
+  const levelColors: Record<GroupLevel, string> = {
     Beginner: 'from-green-500 to-emerald-600',
     Elementary: 'from-blue-500 to-cyan-600',
     Intermediate: 'from-purple-500 to-pink-600',
     Advanced: 'from-orange-500 to-red-600'
+  };
+
+  const getLevel = (level?: string): GroupLevel => {
+    if (level === 'Elementary' || level === 'Intermediate' || level === 'Advanced') {
+      return level;
+    }
+    return 'Beginner';
   };
 
   return (
@@ -131,25 +141,36 @@ export default function GroupsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {groups.map((group, index) => (
             <motion.div key={group.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all">
+              {(() => {
+                const level = getLevel(group.level);
+                return (
               <div 
-                onClick={() => router.push(`/admin/groups/${group.id}`)}
+                onClick={() => router.push(`/admin/students?group=${encodeURIComponent(group.name)}`)}
                 className="cursor-pointer"
               >
-                <div className={`w-16 h-16 bg-gradient-to-br ${levelColors[group.level || 'Beginner']} rounded-2xl flex items-center justify-center mb-4`}>
+                <div className={`w-16 h-16 bg-gradient-to-br ${levelColors[level]} rounded-2xl flex items-center justify-center mb-4`}>
                   <BookOpen className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{group.name}</h3>
                 <p className="text-sm text-gray-500 mb-4">{group.description}</p>
                 <div className="flex items-center justify-between mb-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r ${levelColors[group.level || 'Beginner']} text-white`}>
-                    {group.level || 'Beginner'}
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium bg-gradient-to-r ${levelColors[level]} text-white`}>
+                    {level}
                   </span>
-                  <div className="flex items-center space-x-1 text-gray-600 cursor-pointer hover:text-purple-600">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/admin/students?group=${encodeURIComponent(group.name)}`);
+                    }}
+                    className="flex items-center space-x-1 text-gray-600 cursor-pointer hover:text-purple-600"
+                  >
                     <Users className="w-4 h-4" />
                     <span className="text-sm font-medium">{group.studentCount || 0} students</span>
                   </div>
                 </div>
               </div>
+                );
+              })()}
               <div className="flex space-x-2">
                 <button 
                   onClick={() => handleEditGroup(group)}

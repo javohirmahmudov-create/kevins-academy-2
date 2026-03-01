@@ -165,37 +165,47 @@ export async function findTelegramChatIdByPhone(phone?: string | null) {
   const normalized = normalizePhoneForLinking(phone)
   if (!normalized) return ''
 
-  const telegramLinkDelegate = (prisma as any).telegramLink
-  if (!telegramLinkDelegate) return ''
-  const row = await telegramLinkDelegate.findUnique({ where: { phoneNormalized: normalized } })
-  return row?.chatId ? String(row.chatId) : ''
+  try {
+    const telegramLinkDelegate = (prisma as any).telegramLink
+    if (!telegramLinkDelegate) return ''
+    const row = await telegramLinkDelegate.findUnique({ where: { phoneNormalized: normalized } })
+    return row?.chatId ? String(row.chatId) : ''
+  } catch (error) {
+    console.warn('Telegram phone lookup skipped:', error)
+    return ''
+  }
 }
 
 export async function upsertTelegramPhoneLink(input: UpsertTelegramPhoneLinkInput) {
   const normalized = normalizePhoneForLinking(input.phone)
   if (!normalized || !input.chatId) return null
 
-  const telegramLinkDelegate = (prisma as any).telegramLink
-  if (!telegramLinkDelegate) return null
+  try {
+    const telegramLinkDelegate = (prisma as any).telegramLink
+    if (!telegramLinkDelegate) return null
 
-  const row = await telegramLinkDelegate.upsert({
-    where: { phoneNormalized: normalized },
-    create: {
-      phoneNormalized: normalized,
-      chatId: String(input.chatId),
-      lastRawPhone: input.phone,
-      lastUsername: input.username || null,
-      lastFirstName: input.firstName || null,
-      lastLastName: input.lastName || null,
-    },
-    update: {
-      chatId: String(input.chatId),
-      lastRawPhone: input.phone,
-      lastUsername: input.username || null,
-      lastFirstName: input.firstName || null,
-      lastLastName: input.lastName || null,
-    }
-  })
+    const row = await telegramLinkDelegate.upsert({
+      where: { phoneNormalized: normalized },
+      create: {
+        phoneNormalized: normalized,
+        chatId: String(input.chatId),
+        lastRawPhone: input.phone,
+        lastUsername: input.username || null,
+        lastFirstName: input.firstName || null,
+        lastLastName: input.lastName || null,
+      },
+      update: {
+        chatId: String(input.chatId),
+        lastRawPhone: input.phone,
+        lastUsername: input.username || null,
+        lastFirstName: input.firstName || null,
+        lastLastName: input.lastName || null,
+      }
+    })
 
-  return row
+    return row
+  } catch (error) {
+    console.warn('Telegram phone upsert skipped:', error)
+    return null
+  }
 }

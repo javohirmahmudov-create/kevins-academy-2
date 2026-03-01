@@ -4,18 +4,27 @@ import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/
 import { normalizePhoneForLinking, sendTelegramMessage } from '@/lib/telegram'
 
 function parseStartLinkCode(text: string) {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith('/start')) return ''
-  const parts = trimmed.split(/\s+/)
+  const normalized = text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
+  if (!normalized.toLowerCase().startsWith('/start')) return ''
+
+  const withoutCommand = normalized
+    .replace(/^\/start(?:@[A-Za-z0-9_]+)?/i, '')
+    .trim()
+
+  if (withoutCommand) return withoutCommand
+
+  const parts = normalized.split(/\s+/)
   return parts[1] || ''
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const message = body?.message
+    const message = body?.message || body?.edited_message
     const chatId = message?.chat?.id ? String(message.chat.id) : ''
-    const text = typeof message?.text === 'string' ? message.text : ''
+    const text = typeof message?.text === 'string'
+      ? message.text
+      : (typeof message?.caption === 'string' ? message.caption : '')
 
     if (!chatId || !text) {
       return NextResponse.json({ ok: true })

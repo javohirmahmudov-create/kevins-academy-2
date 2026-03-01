@@ -66,11 +66,39 @@ export async function POST(request: Request) {
 
     const attendance = await prisma.attendance.create({ data: data as any })
 
-    if (status === 'absent' && studentId) {
+    if (studentId) {
       const student = await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } })
       const studentName = student?.fullName || body.studentName || 'O\'quvchi'
       const dateText = formatTelegramDate(parsedDate)
-      const text = `🚨 <b>Davomat ogohlantirishi</b>\n\nHurmatli ota-ona, farzandingiz <b>${studentName}</b> bugun <b>${dateText}</b> darsga qatnashmadi.`
+      const statusMap: Record<string, { emoji: string; label: string; title: string; text: string }> = {
+        present: {
+          emoji: '✅',
+          label: 'Keldi',
+          title: 'Davomat yangilandi',
+          text: `Hurmatli ota-ona, farzandingiz <b>${studentName}</b> <b>${dateText}</b> kuni darsda <b>hozir</b> deb belgilandi.`
+        },
+        late: {
+          emoji: '⏰',
+          label: 'Kech qoldi',
+          title: 'Davomat ogohlantirishi',
+          text: `Hurmatli ota-ona, farzandingiz <b>${studentName}</b> <b>${dateText}</b> kuni darsga <b>kechikib</b> keldi.${note ? `\n📝 Izoh: <i>${note}</i>` : ''}`
+        },
+        absent: {
+          emoji: '🚨',
+          label: 'Darsda yo\'q',
+          title: 'Davomat ogohlantirishi',
+          text: `Hurmatli ota-ona, farzandingiz <b>${studentName}</b> bugun <b>${dateText}</b> darsga qatnashmadi.`
+        }
+      }
+
+      const selected = statusMap[status] || {
+        emoji: '📌',
+        label: String(status || 'Noma\'lum holat'),
+        title: 'Davomat yangilandi',
+        text: `Hurmatli ota-ona, farzandingiz <b>${studentName}</b> uchun davomat holati yangilandi: <b>${String(status || 'Noma\'lum')}</b>.`
+      }
+
+      const text = `${selected.emoji} <b>${selected.title}</b>\n\n${selected.text}\n\nHolat: <b>${selected.label}</b>.`
       const buttonUrl = buildParentPortalUrl()
 
       queueTelegramTask(async () => {

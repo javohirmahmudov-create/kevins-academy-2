@@ -42,6 +42,12 @@ interface ActivityItem {
   date: string;
 }
 
+interface AttendanceHistoryItem {
+  date: string;
+  status: string;
+  note?: string;
+}
+
 interface RankingSummary {
   weeklyRank: number;
   mockRank: number;
@@ -60,16 +66,39 @@ interface LeaderboardRow {
 
 export default function ParentDashboard() {
   const router = useRouter();
-  const { currentParent, logoutParent, t } = useApp();
+  const { currentParent, logoutParent, t, language } = useApp();
   const [parentSession, setParentSession] = useState<ParentSession | null>(null);
   const [childSummary, setChildSummary] = useState<ChildSummary | null>(null);
   const [skills, setSkills] = useState<SkillBreakdown[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceHistoryItem[]>([]);
   const [ranking, setRanking] = useState<RankingSummary>({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [trendData, setTrendData] = useState<Array<Record<string, any>>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const formatDisplayDate = (value?: string) => {
+    if (!value) return t('not_available');
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t('not_available');
+    return date.toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US');
+  };
+
+  const getStatusLabel = (status?: string) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'present') return t('present');
+    if (normalized === 'late') return t('late');
+    if (normalized === 'absent') return t('absent');
+    return t('not_available');
+  };
+
+  const getAttendanceBadgeClass = (status?: string) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'present') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
+    if (normalized === 'late') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+    return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+  };
 
   const loadChildData = async (sessionParent: ParentSession) => {
     setLoading(true);
@@ -86,8 +115,9 @@ export default function ParentDashboard() {
         setChildSummary(null);
         setSkills([]);
         setRecentActivity([]);
+        setAttendanceHistory([]);
         setLeaderboardRows([]);
-        setError('Child record not found. Please contact the administrator.');
+        setError(t('child_record_not_found'));
         return;
       }
 
@@ -176,6 +206,10 @@ export default function ParentDashboard() {
         (record as any).studentName === child.fullName
       );
 
+      const sortedAttendance = [...childAttendance].sort(
+        (a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+      );
+
       const payments = (await getDataForAdmin(sessionParent.adminId, 'payments') as Payment[] | null) || [];
       const childPayments = payments.filter(payment =>
         String((payment as any).studentId || '') === String(child.id) ||
@@ -248,7 +282,10 @@ export default function ParentDashboard() {
 
       const activities: ActivityItem[] = [];
 
-      childScores.slice(-3).reverse().forEach(score => {
+      [...childScores]
+        .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+        .slice(0, 3)
+        .forEach(score => {
         const average = typeof (score as any).value === 'number'
           ? Math.round(Number((score as any).value))
           : (() => {
@@ -261,20 +298,19 @@ export default function ParentDashboard() {
             })();
         activities.push({
           type: 'score',
-          title: 'Test Score Received',
-          description: `${(score as any).subject || 'Overall'}: ${average}%${(score as any).comment ? ` · ${(score as any).comment}` : ''}`,
+          title: t('test_score_received'),
+          description: `${(score as any).subject || t('overall_score')}: ${average}%${(score as any).comment ? ` · ${(score as any).comment}` : ''}`,
           date: score.createdAt || new Date().toISOString(),
         });
       });
 
-      childAttendance.slice(-3).reverse().forEach(record => {
+      sortedAttendance.slice(0, 3).forEach(record => {
         const recordStatus = String(record.status || 'unknown');
-        const statusLabel = recordStatus.charAt(0).toUpperCase() + recordStatus.slice(1);
         const recordDate = record.date || new Date().toISOString();
         activities.push({
           type: 'attendance',
-          title: 'Attendance Marked',
-          description: `${statusLabel} - ${recordDate}`,
+          title: t('attendance_marked'),
+          description: `${getStatusLabel(recordStatus)}${record.note ? ` · ${record.note}` : ''}`,
           date: recordDate,
         });
       });
@@ -288,6 +324,13 @@ export default function ParentDashboard() {
         nextPaymentDue: latestPayment?.dueDate || 'N/A',
       });
       setSkills(skillBreakdown);
+      setAttendanceHistory(
+        sortedAttendance.slice(0, 8).map((record) => ({
+          date: record.date || new Date().toISOString(),
+          status: String(record.status || ''),
+          note: record.note || undefined,
+        }))
+      );
       setRecentActivity(
         activities
           .slice(0, 5)
@@ -295,10 +338,11 @@ export default function ParentDashboard() {
       );
     } catch (err) {
       console.error('Failed to load parent data', err);
-      setError('Failed to load data. Please try again later.');
+      setError(t('failed_to_load_data'));
       setChildSummary(null);
       setSkills([]);
       setRecentActivity([]);
+      setAttendanceHistory([]);
       setRanking({ weeklyRank: 0, mockRank: 0, totalInGroup: 0 });
       setLeaderboardRows([]);
       setTrendData([]);
@@ -344,6 +388,12 @@ export default function ParentDashboard() {
     return () => window.removeEventListener('themeChanged', handleThemeChange);
   }, [parentSession]);
 
+  useEffect(() => {
+    if (!parentSession) return;
+    loadChildData(parentSession);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
+
   const handleLogout = () => {
     logoutParent();
     router.push('/');
@@ -363,68 +413,8 @@ export default function ParentDashboard() {
         <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
             <div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('group_ranking')}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 p-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('weekly_rank')}</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-300">
-                    {ranking.weeklyRank > 0 ? `#${ranking.weeklyRank}` : t('not_available')}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-purple-50 dark:bg-purple-900/20 p-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('mock_exam_rank')}</p>
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-300">
-                    {ranking.mockRank > 0 ? `#${ranking.mockRank}` : t('not_available')}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-green-50 dark:bg-green-900/20 p-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{t('group_size')}</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-300">{ranking.totalInGroup || 0}</p>
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Criteria Trend</h3>
-              {trendData.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">Not enough score data yet.</p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" />
-                      <YAxis domain={[0, 100]} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="overall" name="Overall" stroke="#2563eb" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="vocabulary" stroke="#0ea5e9" dot={false} />
-                      <Line type="monotone" dataKey="grammar" stroke="#8b5cf6" dot={false} />
-                      <Line type="monotone" dataKey="translation" stroke="#14b8a6" dot={false} />
-                      <Line type="monotone" dataKey="attendance" stroke="#22c55e" dot={false} />
-                      <Line type="monotone" dataKey="listening" stroke="#f97316" dot={false} />
-                      <Line type="monotone" dataKey="reading" stroke="#eab308" dot={false} />
-                      <Line type="monotone" dataKey="speaking" stroke="#ec4899" dot={false} />
-                      <Line type="monotone" dataKey="writing" stroke="#ef4444" dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </motion.div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin's Academy</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Parent Portal</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin&apos;s Academy</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('parent_portal')}</p>
             </div>
             <button
               onClick={handleLogout}
@@ -437,15 +427,15 @@ export default function ParentDashboard() {
 
         <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="bg-white dark:bg-gray-800/80 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Parent account connected</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{t('parent_account_connected')}</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              {error || 'Child data not linked yet. Please ask admin to re-save this parent with the correct student.'}
+              {error || t('child_data_not_linked')}
             </p>
             <button
               onClick={() => router.push('/')}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg"
             >
-              Back to Login
+              {t('back_to_login')}
             </button>
           </div>
         </main>
@@ -466,8 +456,8 @@ export default function ParentDashboard() {
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin's Academy</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Parent Portal</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Kevin&apos;s Academy</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('parent_portal')}</p>
               </div>
             </div>
 
@@ -475,7 +465,7 @@ export default function ParentDashboard() {
               <ThemeLanguageToggle />
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{parentSession?.fullName}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Parent</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('parent_role')}</p>
               </div>
               <button
                 onClick={handleLogout}
@@ -505,8 +495,8 @@ export default function ParentDashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-r from-blue-500 to-purple-600 dark:from-red-600 dark:via-red-700 dark:to-purple-800 rounded-2xl p-8 text-white mb-8"
         >
-          <h2 className="text-3xl font-bold mb-2">Hello, {parentSession.fullName}!</h2>
-          <p className="text-blue-100">Here's how your child {childSummary.name} is doing</p>
+          <h2 className="text-3xl font-bold mb-2">{t('hello_parent')}, {parentSession.fullName}!</h2>
+          <p className="text-blue-100">{t('child_progress_intro')}: {childSummary.name}</p>
         </motion.div>
 
         {/* Stats Grid */}
@@ -581,7 +571,7 @@ export default function ParentDashboard() {
               </div>
               <DollarSign className="w-8 h-8 text-orange-500" />
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('next_due')}: {childSummary.nextPaymentDue === 'N/A' ? t('not_available') : childSummary.nextPaymentDue}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{t('next_due')}: {childSummary.nextPaymentDue === 'N/A' ? t('not_available') : formatDisplayDate(childSummary.nextPaymentDue)}</p>
           </motion.div>
         </div>
 
@@ -668,6 +658,67 @@ export default function ParentDashboard() {
           )}
         </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('criteria_trend')}</h3>
+          {trendData.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('not_enough_score_data')}</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="overall" name={t('overall_score')} stroke="#2563eb" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="vocabulary" stroke="#0ea5e9" dot={false} />
+                  <Line type="monotone" dataKey="grammar" stroke="#8b5cf6" dot={false} />
+                  <Line type="monotone" dataKey="translation" stroke="#14b8a6" dot={false} />
+                  <Line type="monotone" dataKey="attendance" stroke="#22c55e" dot={false} />
+                  <Line type="monotone" dataKey="listening" stroke="#f97316" dot={false} />
+                  <Line type="monotone" dataKey="reading" stroke="#eab308" dot={false} />
+                  <Line type="monotone" dataKey="speaking" stroke="#ec4899" dot={false} />
+                  <Line type="monotone" dataKey="writing" stroke="#ef4444" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55 }}
+          className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('attendance_history')}</h3>
+          {attendanceHistory.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('attendance_empty')}</p>
+          ) : (
+            <div className="space-y-3">
+              {attendanceHistory.map((item, index) => (
+                <div key={`${item.date}-${index}`} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/30 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getAttendanceBadgeClass(item.status)}`}>
+                        {getStatusLabel(item.status)}
+                      </span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{formatDisplayDate(item.date)}</span>
+                    </div>
+                    {item.note ? <span className="text-sm text-gray-600 dark:text-gray-400">{item.note}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
         {/* Skills Progress */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -676,24 +727,28 @@ export default function ParentDashboard() {
           className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
         >
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">{t('skills_progress')}</h3>
-          <div className="space-y-4">
-            {skills.map((skill, index) => (
-              <div key={skill.key}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{skill.label}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">{skill.score}%</span>
+          {skills.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('not_enough_score_data')}</p>
+          ) : (
+            <div className="space-y-4">
+              {skills.map((skill, index) => (
+                <div key={skill.key}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{skill.label}</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">{skill.score}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${skill.score}%` }}
+                      transition={{ delay: 0.7 + index * 0.1, duration: 0.8 }}
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${skill.score}%` }}
-                    transition={{ delay: 0.7 + index * 0.1, duration: 0.8 }}
-                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         {/* Recent Activity */}
@@ -704,23 +759,27 @@ export default function ParentDashboard() {
           className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700"
         >
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('recent_activity')}</h3>
-          <div className="space-y-3">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className={`p-4 rounded-xl ${
-                activity.type === 'score' ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-purple-50 dark:bg-purple-900/20'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{activity.title}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('not_available')}</p>
+          ) : (
+            <div className="space-y-3">
+              {recentActivity.map((activity, index) => (
+                <div key={index} className={`p-4 rounded-xl ${
+                  activity.type === 'score' ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-purple-50 dark:bg-purple-900/20'
+                }`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">{activity.title}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      {formatDisplayDate(activity.date)}
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(activity.date).toLocaleDateString()}
-                  </span>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </motion.div>
       </main>
     </div>

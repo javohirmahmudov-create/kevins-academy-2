@@ -28,7 +28,29 @@ function getBot() {
 }
 
 function normalizePhone(phone?: string | null) {
-  return String(phone || '').replace(/[^\d+]/g, '').replace(/^00/, '+')
+  const raw = String(phone || '').trim()
+  if (!raw) return ''
+
+  let digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+
+  if (digits.startsWith('00')) {
+    digits = digits.slice(2)
+  }
+
+  if (digits.length === 10 && digits.startsWith('0')) {
+    digits = `998${digits.slice(1)}`
+  }
+
+  if (digits.length === 9) {
+    digits = `998${digits}`
+  }
+
+  if (digits.length > 12) {
+    digits = digits.slice(-12)
+  }
+
+  return digits
 }
 
 export function buildParentPortalUrl() {

@@ -22,6 +22,10 @@ function daysBetweenLocalDates(laterDate: Date, earlierDate: Date) {
 }
 
 function buildCardPaymentUrl() {
+  const appBase = process.env.NEXT_PUBLIC_APP_URL || process.env.PARENT_PORTAL_URL || ''
+  if (appBase) {
+    return `${appBase.replace(/\/$/, '')}/pay`
+  }
   return process.env.PAYMENT_CARD_URL || process.env.NEXT_PUBLIC_PAYMENT_CARD_URL || 'https://payme.uz/home/main'
 }
 

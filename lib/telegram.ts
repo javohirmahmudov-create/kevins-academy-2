@@ -214,6 +214,7 @@ export async function notifyParentsByStudentId(input: NotifyParentsInput) {
     const chatIds = await findLinkedParentChatIds({ adminId: input.adminId, studentId: input.studentId })
     if (!chatIds.length) return
     const defaultBotChatUrl = buildTelegramBotChatUrl()
+    const useModeButtons = input.modeButtons ?? true
 
     for (const chatId of chatIds) {
       await sendTelegramMessage({
@@ -221,11 +222,11 @@ export async function notifyParentsByStudentId(input: NotifyParentsInput) {
         text: input.text,
         buttonText: input.buttonText,
         buttonUrl: input.buttonUrl,
-        aiButtonText: input.aiButtonText || '🤖 SUNIY INTELLEKT JAVOBI',
-        aiButtonUrl: input.aiButtonUrl || defaultBotChatUrl || undefined,
-        botButtonText: input.botButtonText || "Kevin's Academy bot",
-        botButtonUrl: input.botButtonUrl || defaultBotChatUrl || undefined,
-        modeButtons: input.modeButtons ?? true,
+        aiButtonText: input.aiButtonText || (useModeButtons ? '🤖 SUNIY INTELLEKT JAVOBI' : undefined),
+        aiButtonUrl: input.aiButtonUrl || (useModeButtons ? (defaultBotChatUrl || undefined) : undefined),
+        botButtonText: input.botButtonText || (useModeButtons ? "Kevin's Academy bot" : undefined),
+        botButtonUrl: input.botButtonUrl || (useModeButtons ? (defaultBotChatUrl || undefined) : undefined),
+        modeButtons: useModeButtons,
         activeMode: input.activeMode || 'bot',
       })
     }

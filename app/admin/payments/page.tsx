@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User } from 'lucide-react';
+import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User, Search, Filter } from 'lucide-react';
 import { getPayments, addPayment, getStudents, Payment } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 
@@ -202,49 +202,60 @@ export default function PaymentsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-            placeholder={t('search_by_student_name')}
-          />
-          <select
-            value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
-            className="w-full md:w-96 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
-          >
-            <option value="">{t('all_groups')}</option>
-            {groupOptions.map((group) => (
-              <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
-            ))}
-          </select>
+        <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-gray-700 font-semibold">
+              <Filter className="w-4 h-4" />
+              <span>Filter</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                placeholder={t('search_by_student_name')}
+              />
+            </div>
+            <select
+              value={selectedGroup}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+            >
+              <option value="">{t('all_groups')}</option>
+              {groupOptions.map((group) => (
+                <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1180px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('student')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('group')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('base_amount')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('penalty')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('total_due')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('payment_window')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('paid_at')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('actions')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('student')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('group')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('base_amount')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('penalty')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('total_due')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('payment_window')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('paid_at')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('status')}</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 whitespace-nowrap">{t('actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredPayments.map((payment, index) => (
-                  <motion.tr key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-gray-50">
+                  <motion.tr key={payment.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }} className="hover:bg-slate-50 transition-colors">
                     {(() => {
                       const displayStatus = payment.isOverdue ? 'overdue' : String(payment.status || 'pending');
                       return (
                         <>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 min-w-[240px]">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center">
                           <User className="w-5 h-5 text-white" />
@@ -272,14 +283,14 @@ export default function PaymentsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(displayStatus)}
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(displayStatus)}`}>
                           {t(displayStatus)}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex space-x-2">
-                        <button onClick={() => togglePaymentStatus(String(payment.id))} className="text-teal-600 hover:text-teal-700 text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => togglePaymentStatus(String(payment.id))} className="px-3 py-1.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 text-sm font-medium">
                           {payment.status === 'paid' ? t('mark_unpaid') : t('mark_paid')}
                         </button>
                         <button
@@ -294,7 +305,7 @@ export default function PaymentsPage() {
                               setPayments([]);
                             }
                           }}
-                          className="text-red-600 hover:text-red-700 text-sm font-medium"
+                          className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 text-sm font-medium"
                         >
                           {t('delete')}
                         </button>

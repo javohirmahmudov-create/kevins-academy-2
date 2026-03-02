@@ -480,23 +480,24 @@ async function askGeminiWithFallback(prompt: string) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
   if (!apiKey) return ''
 
-  const configuredModels = (process.env.GEMINI_MODEL || 'gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash')
+  const configuredModels = (process.env.GEMINI_MODEL || 'gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash-latest,gemini-1.5-pro-latest,gemini-1.5-flash')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
 
-  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 7000)
-  const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 7000
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 15000)
+  const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000
 
   for (const model of configuredModels) {
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), safeTimeout)
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [
@@ -522,14 +523,19 @@ async function askGeminiWithFallback(prompt: string) {
       }
 
       const data = await response.json()
-      const text = data?.candidates?.[0]?.content?.parts
-        ?.map((part: any) => part?.text)
+      const text = (data?.candidates || [])
+        .flatMap((candidate: any) => candidate?.content?.parts || [])
+        .map((part: any) => part?.text)
         .filter(Boolean)
         .join('\n')
         ?.trim()
 
       if (text) {
         return text
+      }
+
+      if (data?.promptFeedback?.blockReason) {
+        console.error(`Gemini blocked prompt (${model}):`, data.promptFeedback)
       }
     } catch (error) {
       console.error(`Gemini request failed (${model}):`, error)

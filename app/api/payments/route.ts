@@ -258,11 +258,11 @@ export async function POST(request: Request) {
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId, text, smsText })
       } else if (isAlreadyOverdue(status, effectiveDueDate)) {
-        const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || body.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n💳 Karta: <b>${getCardInfoText()}</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
+        const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || body.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
         const smsText = `Kevin's Academy: To'lov muddati o'tgan. Kechikish ${Number(penalty.overdueDays || 0)} kun. Jami: ${Number(penalty.totalDue || body.amount || 0).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId, text, smsText })
       } else if (startDate || endDate || dueDate) {
-        const text = `🧾 <b>To'lov davri belgilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>\n💳 Karta: <b>${getCardInfoText()}</b>\n\nEslatma shu muddat asosida yuboriladi.`
+        const text = `🧾 <b>To'lov davri belgilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>\n\nEslatma shu muddat asosida yuboriladi.`
         const smsText = `Kevin's Academy: To'lov davri belgilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId, text, smsText })
       } else if (isDueSoon(status, endDate || dueDate)) {
@@ -344,11 +344,11 @@ export async function PUT(request: Request) {
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
       } else if (isAlreadyOverdue(payment.status, nextDueDate)) {
-        const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || payment.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n💳 Karta: <b>${getCardInfoText()}</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
+        const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || payment.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
         const smsText = `Kevin's Academy: To'lov muddati o'tgan. Kechikish ${Number(penalty.overdueDays || 0)} kun. Jami: ${Number(penalty.totalDue || payment.amount || 0).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
       } else if (payment.startDate || payment.endDate || payment.dueDate) {
-        const text = `🧾 <b>To'lov davri yangilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>\n💳 Karta: <b>${getCardInfoText()}</b>.`
+        const text = `🧾 <b>To'lov davri yangilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov davri yangilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}. Karta: ${getCardInfoText()}.`
         await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
       } else if (isDueSoon(payment.status, nextDueDate)) {

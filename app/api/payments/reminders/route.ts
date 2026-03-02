@@ -144,7 +144,7 @@ export async function GET(request: Request) {
       dailyCache.set(cacheKey, Date.now())
       const buttonUrl = buildCardPaymentUrl()
       const dueText = formatTelegramDate(payment.endDate || payment.dueDate)
-      const text = `🚨 <b>Kunlik to'lov eslatmasi</b>\n\n📅 To'lov muddati: <b>${dueText}</b>\n⏳ Kechikish: <b>${calc.overdueDays} kun</b>\n💸 Jami to'lov: <b>${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm</b>\n💳 Karta: <b>${getCardInfoText()}</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
+      const text = `🚨 <b>Kunlik to'lov eslatmasi</b>\n\n📅 To'lov muddati: <b>${dueText}</b>\n⏳ Kechikish: <b>${calc.overdueDays} kun</b>\n💸 Jami to'lov: <b>${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
       const smsText = `Kevin's Academy: Kunlik eslatma. To'lov muddati o'tgan (${calc.overdueDays} kun). Jami: ${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
 
       queueTelegramTask(async () => {

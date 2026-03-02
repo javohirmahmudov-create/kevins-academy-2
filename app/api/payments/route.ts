@@ -15,14 +15,26 @@ function startOfLocalDay(date: Date) {
   return local
 }
 
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !Number.isNaN(value.getTime())
+}
+
+function parseValidDate(value: unknown): Date | null {
+  if (!value) return null
+  const parsed = new Date(String(value))
+  return isValidDate(parsed) ? parsed : null
+}
+
 function daysBetweenLocalDates(laterDate: Date, earlierDate: Date) {
+  if (!isValidDate(laterDate) || !isValidDate(earlierDate)) return 0
   const later = startOfLocalDay(laterDate)
   const earlier = startOfLocalDay(earlierDate)
   return Math.round((later.getTime() - earlier.getTime()) / DAY_MS)
 }
 
-function buildCardPaymentUrl() {
-  const appBase = process.env.NEXT_PUBLIC_APP_URL || process.env.PARENT_PORTAL_URL || ''
+function buildCardPaymentUrl(origin?: string) {
+  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''
+  const appBase = origin || process.env.NEXT_PUBLIC_APP_URL || process.env.PARENT_PORTAL_URL || vercelUrl || ''
   if (appBase) {
     return `${appBase.replace(/\/$/, '')}/pay`
   }
@@ -47,9 +59,10 @@ async function sendPaymentNotice(input: {
   studentId?: number | null
   text: string
   smsText: string
+  origin?: string
 }) {
   if (!input.studentId) return
-  const buttonUrl = buildCardPaymentUrl()
+  const buttonUrl = buildCardPaymentUrl(input.origin)
   queueTelegramTask(async () => {
     await notifyParentsByStudentId({
       adminId: input.adminId,
@@ -82,7 +95,7 @@ function calculatePenalty(input: {
   const penaltyPerDay = Number(input.penaltyPerDay || 10000)
   const now = new Date()
 
-  if (status === 'paid' || !endDate) {
+  if (status === 'paid' || !endDate || !isValidDate(endDate)) {
     return {
       overdueDays: 0,
       penaltyAmount: 0,
@@ -146,6 +159,7 @@ function isAlreadyOverdue(status?: string | null, dueDate?: Date | null) {
 export async function GET(request: Request) {
   try {
     const adminId = getAdminIdFromRequest(request)
+    const requestOrigin = new URL(request.url).origin
     const payments = await prisma.payment.findMany({
       where: adminId ? { adminId } : undefined,
       orderBy: { createdAt: 'desc' },
@@ -194,6 +208,7 @@ export async function GET(request: Request) {
         studentId: item.studentId,
         text: overdueText,
         smsText: overdueSms,
+        origin: requestOrigin,
       })
     }
 
@@ -207,14 +222,15 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const adminId = getAdminIdFromRequest(request)
+    const requestOrigin = new URL(request.url).origin
     const studentId = await resolveStudentId(body)
     const status = body.status || 'pending'
-    const dueDate = body.dueDate ? new Date(body.dueDate) : null
-    const startDate = body.startDate ? new Date(body.startDate) : null
-    const endDate = body.endDate ? new Date(body.endDate) : dueDate
+    const dueDate = parseValidDate(body.dueDate)
+    const startDate = parseValidDate(body.startDate)
+    const endDate = parseValidDate(body.endDate) || dueDate
     const penaltyPerDay = Number(body.penaltyPerDay || 10000)
-    const paidAt = body.paidAt
-      ? new Date(body.paidAt)
+    const paidAt = parseValidDate(body.paidAt)
+      ? parseValidDate(body.paidAt)
       : status === 'paid'
         ? new Date()
         : null
@@ -256,19 +272,19 @@ export async function POST(request: Request) {
       if (status === 'paid') {
         const text = `💳 <b>To'lov holati</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId, text, smsText, origin: requestOrigin })
       } else if (isAlreadyOverdue(status, effectiveDueDate)) {
         const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || body.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
         const smsText = `Kevin's Academy: To'lov muddati o'tgan. Kechikish ${Number(penalty.overdueDays || 0)} kun. Jami: ${Number(penalty.totalDue || body.amount || 0).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId, text, smsText, origin: requestOrigin })
       } else if (startDate || endDate || dueDate) {
         const text = `🧾 <b>To'lov davri belgilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>\n\nEslatma shu muddat asosida yuboriladi.`
         const smsText = `Kevin's Academy: To'lov davri belgilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId, text, smsText, origin: requestOrigin })
       } else if (isDueSoon(status, endDate || dueDate)) {
         const text = `⏰ <b>To'lov eslatmasi</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId, text, smsText, origin: requestOrigin })
       }
     }
 
@@ -282,6 +298,7 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json()
     const adminId = getAdminIdFromRequest(request)
+    const requestOrigin = new URL(request.url).origin
     const id = Number(body.id)
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 })
@@ -294,8 +311,8 @@ export async function PUT(request: Request) {
 
     const studentId = await resolveStudentId(body)
     const status = body.status || undefined
-    const dueDate = body.dueDate !== undefined ? (body.dueDate ? new Date(body.dueDate) : null) : undefined
-    const endDate = body.endDate !== undefined ? (body.endDate ? new Date(body.endDate) : null) : dueDate
+    const dueDate = body.dueDate !== undefined ? parseValidDate(body.dueDate) : undefined
+    const endDate = body.endDate !== undefined ? parseValidDate(body.endDate) : dueDate
 
     const resolvedStudentName = body.studentName !== undefined
       ? (body.studentName || null)
@@ -303,8 +320,9 @@ export async function PUT(request: Request) {
         ? (await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } }))?.fullName || null
         : undefined)
 
-    const paidAt = body.paidAt
-      ? new Date(body.paidAt)
+    const parsedPaidAt = parseValidDate(body.paidAt)
+    const paidAt = parsedPaidAt
+      ? parsedPaidAt
       : status === 'paid'
         ? new Date()
         : status === 'pending' || status === 'overdue'
@@ -318,7 +336,7 @@ export async function PUT(request: Request) {
       status,
       month: body.month !== undefined ? body.month || null : undefined,
       dueDate,
-      startDate: body.startDate !== undefined ? (body.startDate ? new Date(body.startDate) : null) : undefined,
+      startDate: body.startDate !== undefined ? parseValidDate(body.startDate) : undefined,
       endDate,
       penaltyPerDay: body.penaltyPerDay !== undefined ? Number(body.penaltyPerDay || 10000) : undefined,
       paidAt,
@@ -342,19 +360,19 @@ export async function PUT(request: Request) {
       if (payment.status === 'paid') {
         const text = `✅ <b>To'lov qabul qilindi</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText, origin: requestOrigin })
       } else if (isAlreadyOverdue(payment.status, nextDueDate)) {
         const text = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${nextDueText}</b>\n⏳ Kechikish: <b>${Number(penalty.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(penalty.totalDue || payment.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
         const smsText = `Kevin's Academy: To'lov muddati o'tgan. Kechikish ${Number(penalty.overdueDays || 0)} kun. Jami: ${Number(penalty.totalDue || payment.amount || 0).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText, origin: requestOrigin })
       } else if (payment.startDate || payment.endDate || payment.dueDate) {
         const text = `🧾 <b>To'lov davri yangilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov davri yangilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText, origin: requestOrigin })
       } else if (isDueSoon(payment.status, nextDueDate)) {
         const text = `🔔 <b>To'lov muddati yaqin</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}. Karta: ${getCardInfoText()}.`
-        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText, origin: requestOrigin })
       }
     }
 

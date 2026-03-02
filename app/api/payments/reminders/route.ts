@@ -20,8 +20,9 @@ function daysBetweenLocalDates(laterDate: Date, earlierDate: Date) {
   return Math.round((later.getTime() - earlier.getTime()) / DAY_MS)
 }
 
-function buildCardPaymentUrl() {
-  const appBase = process.env.NEXT_PUBLIC_APP_URL || process.env.PARENT_PORTAL_URL || ''
+function buildCardPaymentUrl(origin?: string) {
+  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ''
+  const appBase = origin || process.env.NEXT_PUBLIC_APP_URL || process.env.PARENT_PORTAL_URL || vercelUrl || ''
   if (appBase) {
     return `${appBase.replace(/\/$/, '')}/pay`
   }
@@ -100,6 +101,7 @@ export async function GET(request: Request) {
 
     const now = new Date()
     const todayKey = getDayKey(now)
+    const requestOrigin = new URL(request.url).origin
 
     const overduePayments = await prisma.payment.findMany({
       where: {
@@ -142,7 +144,7 @@ export async function GET(request: Request) {
       if (!calc.isOverdue) continue
 
       dailyCache.set(cacheKey, Date.now())
-      const buttonUrl = buildCardPaymentUrl()
+      const buttonUrl = buildCardPaymentUrl(requestOrigin)
       const dueText = formatTelegramDate(payment.endDate || payment.dueDate)
       const text = `🚨 <b>Kunlik to'lov eslatmasi</b>\n\n📅 To'lov muddati: <b>${dueText}</b>\n⏳ Kechikish: <b>${calc.overdueDays} kun</b>\n💸 Jami to'lov: <b>${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
       const smsText = `Kevin's Academy: Kunlik eslatma. To'lov muddati o'tgan (${calc.overdueDays} kun). Jami: ${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`

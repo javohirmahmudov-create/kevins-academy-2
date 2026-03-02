@@ -15,6 +15,7 @@ export default function PaymentsPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
 
   const loadData = async () => {
     try {
@@ -169,7 +170,9 @@ export default function PaymentsPage() {
     const query = searchTerm.trim().toLowerCase();
     const matchesSearch = !query || getStudentDisplayName(payment).toLowerCase().includes(query);
     const matchesGroup = !selectedGroup || getStudentGroup(payment) === selectedGroup;
-    return matchesSearch && matchesGroup;
+    const displayStatus = payment.isOverdue ? 'overdue' : String(payment.status || 'pending');
+    const matchesStatus = selectedStatus === 'all' || displayStatus === selectedStatus;
+    return matchesSearch && matchesGroup && matchesStatus;
   }).sort((a, b) => {
     const groupA = getStudentGroup(a);
     const groupB = getStudentGroup(b);
@@ -208,6 +211,32 @@ export default function PaymentsPage() {
               <Filter className="w-4 h-4" />
               <span>Filter</span>
             </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => setSelectedStatus('all')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              Barchasi ({payments.length})
+            </button>
+            <button
+              onClick={() => setSelectedStatus('paid')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'paid' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+            >
+              To'langan ({payments.filter((payment) => (payment.isOverdue ? 'overdue' : String(payment.status || 'pending')) === 'paid').length})
+            </button>
+            <button
+              onClick={() => setSelectedStatus('pending')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'pending' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}
+            >
+              Kutilmoqda ({payments.filter((payment) => (payment.isOverdue ? 'overdue' : String(payment.status || 'pending')) === 'pending').length})
+            </button>
+            <button
+              onClick={() => setSelectedStatus('overdue')}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'overdue' ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}`}
+            >
+              Muddati o'tgan ({payments.filter((payment) => (payment.isOverdue ? 'overdue' : String(payment.status || 'pending')) === 'overdue').length})
+            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="relative">

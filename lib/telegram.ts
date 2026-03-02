@@ -25,6 +25,8 @@ type NotifyParentsInput = {
   aiButtonText?: string
   botButtonUrl?: string
   botButtonText?: string
+  modeButtons?: boolean
+  activeMode?: 'ai' | 'bot'
 }
 
 type UpsertTelegramPhoneLinkInput = {
@@ -223,8 +225,8 @@ export async function notifyParentsByStudentId(input: NotifyParentsInput) {
         aiButtonUrl: input.aiButtonUrl || defaultBotChatUrl || undefined,
         botButtonText: input.botButtonText || "Kevin's Academy bot",
         botButtonUrl: input.botButtonUrl || defaultBotChatUrl || undefined,
-        modeButtons: true,
-        activeMode: 'bot',
+        modeButtons: input.modeButtons ?? true,
+        activeMode: input.activeMode || 'bot',
       })
     }
   } catch (error) {

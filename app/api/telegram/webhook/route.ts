@@ -485,60 +485,73 @@ async function askGeminiWithFallback(prompt: string) {
     .map((item) => item.trim())
     .filter(Boolean)
 
+  const models = configuredModels.length
+    ? configuredModels
+    : ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash']
+
   const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 15000)
   const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 15000
 
-  for (const model of configuredModels) {
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), safeTimeout)
+  for (const model of models) {
+    const urls = [
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`,
+    ]
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }]
+    for (const url of urls) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), safeTimeout)
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(url.includes('?key=') ? {} : { 'x-goog-api-key': apiKey }),
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.25,
+              maxOutputTokens: 520,
             }
-          ],
-          generationConfig: {
-            temperature: 0.25,
-            maxOutputTokens: 420,
-          }
-        }),
-        signal: controller.signal,
-      })
+          }),
+          signal: controller.signal,
+        })
 
-      clearTimeout(timeout)
+        clearTimeout(timeout)
 
-      if (!response.ok) {
-        const raw = await response.text()
-        console.error(`Gemini API error (${model}):`, raw)
-        continue
+        if (!response.ok) {
+          const raw = await response.text()
+          console.error(`Gemini API error (${model}) [${url.includes('/v1beta/') ? 'v1beta' : 'v1'}]:`, raw)
+          continue
+        }
+
+        const data = await response.json()
+        const text = (data?.candidates || [])
+          .flatMap((candidate: any) => candidate?.content?.parts || [])
+          .map((part: any) => part?.text)
+          .filter(Boolean)
+          .join('\n')
+          ?.trim()
+
+        if (text) {
+          return text
+        }
+
+        if (data?.promptFeedback?.blockReason) {
+          console.error(`Gemini blocked prompt (${model}):`, data.promptFeedback)
+        }
+      } catch (error) {
+        console.error(`Gemini request failed (${model}):`, error)
       }
-
-      const data = await response.json()
-      const text = (data?.candidates || [])
-        .flatMap((candidate: any) => candidate?.content?.parts || [])
-        .map((part: any) => part?.text)
-        .filter(Boolean)
-        .join('\n')
-        ?.trim()
-
-      if (text) {
-        return text
-      }
-
-      if (data?.promptFeedback?.blockReason) {
-        console.error(`Gemini blocked prompt (${model}):`, data.promptFeedback)
-      }
-    } catch (error) {
-      console.error(`Gemini request failed (${model}):`, error)
     }
   }
 

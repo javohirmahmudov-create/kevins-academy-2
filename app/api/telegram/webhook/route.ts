@@ -116,7 +116,7 @@ function normalizeQuestion(question: string) {
 
 function isSmallTalkMessage(question: string) {
   const normalized = normalizeQuestion(question)
-  return /(rahmat|raxmat|thank|thanks|ok|okay|xo'p|xop|tushunarli|zo'r|zor|salom|assalomu|alaykum|hello|hi|👍|🙏|👌)/.test(normalized)
+  return /(\b(rahmat|raxmat|thank|thanks|ok|okay|xo'p|xop|tushunarli|zo'r|zor|salom|assalomu|alaykum|hello|hi)\b|[👍🙏👌])/.test(normalized)
 }
 
 function isDirectQuestionMessage(question: string) {

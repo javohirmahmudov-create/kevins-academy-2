@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
-import { normalizePhoneForLinking, sendTelegramMessage, upsertTelegramPhoneLink } from '@/lib/telegram'
+import { answerTelegramCallbackQuery, normalizePhoneForLinking, sendTelegramMessage, upsertTelegramPhoneLink } from '@/lib/telegram'
 
 const AI_MIN_INTERVAL_MS = Number(process.env.TELEGRAM_AI_MIN_INTERVAL_MS || 3000)
 const AI_COOLDOWN_CACHE_LIMIT = 5000
 const aiRequestCooldownByChat = new Map<string, number>()
+const chatAssistantModeByChat = new Map<string, 'ai' | 'bot'>()
 
 type StudentInsightSnapshot = {
   parentName: string
@@ -121,6 +122,11 @@ function isSmallTalkMessage(question: string) {
 function isDirectQuestionMessage(question: string) {
   const normalized = normalizeQuestion(question)
   return /(nega|nima|qanday|qancha|qaysi|how|why|what|which|\?)/.test(normalized)
+}
+
+function isBotAllowedQuestion(question: string) {
+  const normalized = normalizeQuestion(question)
+  return /(davomat|qatnash|kechik|ball|reyting|tolov|to'lov|toʻlov|payment|listening|reading|speaking|writing|grammar|vocabulary|translation|attendance|reja|plan|youtube|link|uyga vazifa|homework|holat)/.test(normalized)
 }
 
 function scoreTrendFromRows(rows: Array<{ overallPercent?: number | null; value?: number | null }>) {
@@ -603,6 +609,31 @@ async function buildParentAssistantReply(input: {
   return fastReply
 }
 
+function buildBotModeReply(input: { question: string; snapshot: StudentInsightSnapshot }) {
+  if (!isBotAllowedQuestion(input.question)) {
+    return [
+      '📘 <b>KEVIN BOT rejimi</b>',
+      '',
+      'Men faqat quyidagi yo\'nalishlarda javob bera olaman:',
+      '• davomat holati',
+      '• umumiy ball va trend',
+      '• guruh reytingi',
+      '• to\'lov holati',
+      '• skills (listening/reading/speaking/writing/...)',
+      '• reja, uyga vazifa, YouTube tavsiyasi',
+      '',
+      'Namuna savollar:',
+      '• Davomat nega pasaydi?',
+      '• Listening bo\'yicha reja ber',
+      '• Guruh reytingida nechanchi o\'rin?',
+      '',
+      'Erkin savol-javob uchun <b>KEVIN AI</b> tugmasini bosing.'
+    ].join('\n')
+  }
+
+  return buildInstantInsightReply(input.question, input.snapshot)
+}
+
 function parseStartLinkCode(text: string) {
   const normalized = text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
   if (!normalized.toLowerCase().startsWith('/start')) return ''
@@ -650,6 +681,44 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    const callbackQuery = body?.callback_query
+
+    if (callbackQuery?.id && callbackQuery?.message?.chat?.id) {
+      const chatId = String(callbackQuery.message.chat.id)
+      const data = String(callbackQuery.data || '')
+
+      if (data === 'kevin_mode_ai' || data === 'kevin_mode_bot') {
+        const nextMode: 'ai' | 'bot' = data === 'kevin_mode_ai' ? 'ai' : 'bot'
+        chatAssistantModeByChat.set(chatId, nextMode)
+
+        await answerTelegramCallbackQuery({
+          callbackQueryId: String(callbackQuery.id),
+          text: nextMode === 'ai' ? 'KEVIN AI rejimi yoqildi' : 'KEVIN BOT rejimi yoqildi',
+        })
+
+        const linkedParent = await resolveParentByChatId(chatId)
+        const parentName = linkedParent?.unpacked?.fullName || 'ota-ona'
+        const modeText = nextMode === 'ai'
+          ? `🤖 <b>KEVIN AI yoqildi</b>\n\nHurmatli <b>${parentName}</b>, endi farzandingiz bo\'yicha erkin savollarni bemalol bering.`
+          : `📘 <b>KEVIN BOT yoqildi</b>\n\nHurmatli <b>${parentName}</b>, endi men faqat tizimdagi tayyor yo\'nalishlar bo\'yicha javob beraman.`
+
+        const sent = await sendTelegramMessage({
+          chatId,
+          text: modeText,
+          modeButtons: true,
+          activeMode: nextMode,
+        })
+        if (!sent.ok) {
+          console.error('Telegram webhook: failed sending mode-switch message', sent)
+        }
+
+        return NextResponse.json({ ok: true, mode: nextMode })
+      }
+
+      await answerTelegramCallbackQuery({ callbackQueryId: String(callbackQuery.id) })
+      return NextResponse.json({ ok: true })
+    }
+
     const message = body?.message || body?.edited_message
     const chatId = message?.chat?.id ? String(message.chat.id) : ''
     const fromUser = message?.from || null
@@ -783,14 +852,22 @@ export async function POST(request: Request) {
         skills,
       }
 
-      const aiText = await buildParentAssistantReply({
-        question: text,
-        snapshot,
-      })
+      const mode = chatAssistantModeByChat.get(chatId) || 'bot'
+      const aiText = mode === 'ai'
+        ? await buildParentAssistantReply({
+            question: text,
+            snapshot,
+          })
+        : buildBotModeReply({
+            question: text,
+            snapshot,
+          })
 
       const sent = await sendTelegramMessage({
         chatId,
-        text: `🤖 <b>AI yordamchi</b>\n\n${aiText}`,
+        text: `${mode === 'ai' ? '🤖 <b>KEVIN AI</b>' : '📘 <b>KEVIN BOT</b>'}\n\n${aiText}`,
+        modeButtons: true,
+        activeMode: mode,
       })
       if (!sent.ok) {
         console.error('Telegram webhook: failed sending AI response', sent)
@@ -801,9 +878,12 @@ export async function POST(request: Request) {
     if (!linkCode) {
       const alreadyLinked = await resolveParentByChatId(chatId)
       if (alreadyLinked) {
+        chatAssistantModeByChat.set(chatId, 'bot')
         const sent = await sendTelegramMessage({
           chatId,
-          text: `✅ Bot allaqachon ulangan.\n\nHurmatli <b>${alreadyLinked.unpacked?.fullName || 'ota-ona'}</b>, endi sizga davomat va ball bo'yicha doimiy bildirishnomalar keladi.`
+          text: `✅ Bot allaqachon ulangan.\n\nHurmatli <b>${alreadyLinked.unpacked?.fullName || 'ota-ona'}</b>, endi sizga davomat va ball bo'yicha doimiy bildirishnomalar keladi.\n\nHozirgi rejim: <b>KEVIN BOT</b>. Erkin AI savollar uchun <b>KEVIN AI</b> tugmasini bosing.`,
+          modeButtons: true,
+          activeMode: 'bot',
         })
         if (!sent.ok) {
           console.error('Telegram webhook: failed sending already-linked message', sent)
@@ -880,9 +960,13 @@ export async function POST(request: Request) {
       }
     })
 
+    chatAssistantModeByChat.set(chatId, 'bot')
+
     const sent = await sendTelegramMessage({
       chatId,
-      text: `✅ Telegram muvaffaqiyatli ulandi!\n\nHurmatli <b>${matchedParent.unpacked?.fullName || 'ota-ona'}</b>, endi sizga real-vaqtda bildirishnomalar yuboriladi.`,
+      text: `✅ Telegram muvaffaqiyatli ulandi!\n\nHurmatli <b>${matchedParent.unpacked?.fullName || 'ota-ona'}</b>, endi sizga real-vaqtda bildirishnomalar yuboriladi.\n\nHozirgi rejim: <b>KEVIN BOT</b>. Erkin AI savollar uchun <b>KEVIN AI</b> tugmasini bosing.`,
+      modeButtons: true,
+      activeMode: 'bot',
     })
     if (!sent.ok) {
       console.error('Telegram webhook: failed sending success message', sent)

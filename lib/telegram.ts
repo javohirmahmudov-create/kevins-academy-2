@@ -7,6 +7,12 @@ type SendTelegramMessageInput = {
   text: string
   buttonUrl?: string
   buttonText?: string
+  aiButtonUrl?: string
+  aiButtonText?: string
+  botButtonUrl?: string
+  botButtonText?: string
+  modeButtons?: boolean
+  activeMode?: 'ai' | 'bot'
 }
 
 type NotifyParentsInput = {
@@ -15,6 +21,10 @@ type NotifyParentsInput = {
   text: string
   buttonUrl?: string
   buttonText?: string
+  aiButtonUrl?: string
+  aiButtonText?: string
+  botButtonUrl?: string
+  botButtonText?: string
 }
 
 type UpsertTelegramPhoneLinkInput = {
@@ -67,18 +77,47 @@ export function buildParentPortalUrl() {
   return `${base.replace(/\/$/, '')}/parent`
 }
 
+export function buildTelegramBotChatUrl() {
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || ''
+  if (!botUsername) return ''
+  return `https://t.me/${botUsername}`
+}
+
 export async function sendTelegramMessage(input: SendTelegramMessageInput) {
   const bot = getBot()
   if (!bot) return { ok: false as const, reason: 'missing_token' }
 
   try {
+    const inlineKeyboard: Array<Array<{ text: string; url: string }>> = []
+
+    if (input.buttonUrl) {
+      inlineKeyboard.push([{ text: input.buttonText || "Batafsil ko'rish", url: input.buttonUrl }])
+    }
+
+    if (input.modeButtons) {
+      const aiLabel = input.activeMode === 'ai' ? '✅ KEVIN AI' : '🤖 KEVIN AI'
+      const botLabel = input.activeMode === 'bot' ? '✅ KEVIN BOT' : '📘 KEVIN BOT'
+      inlineKeyboard.push([
+        { text: aiLabel, callback_data: 'kevin_mode_ai' },
+        { text: botLabel, callback_data: 'kevin_mode_bot' },
+      ] as any)
+    } else {
+      if (input.aiButtonUrl) {
+        inlineKeyboard.push([{ text: input.aiButtonText || '🤖 SUNIY INTELLEKT JAVOBI', url: input.aiButtonUrl }])
+      }
+
+      if (input.botButtonUrl) {
+        inlineKeyboard.push([{ text: input.botButtonText || "Kevin's Academy bot", url: input.botButtonUrl }])
+      }
+    }
+
     await bot.sendMessage(input.chatId, input.text, {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
-      ...(input.buttonUrl
+      ...(inlineKeyboard.length
         ? {
             reply_markup: {
-              inline_keyboard: [[{ text: input.buttonText || "Batafsil ko'rish", url: input.buttonUrl }]]
+              inline_keyboard: inlineKeyboard
             }
           }
         : {})
@@ -87,6 +126,30 @@ export async function sendTelegramMessage(input: SendTelegramMessageInput) {
   } catch (error) {
     console.error('Telegram send error:', error)
     return { ok: false as const, reason: 'send_failed' }
+  }
+}
+
+export async function answerTelegramCallbackQuery(input: { callbackQueryId: string; text?: string }) {
+  const token = getBotToken()
+  if (!token || !input.callbackQueryId) return { ok: false as const, reason: 'missing_token_or_id' }
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: input.callbackQueryId, text: input.text || '' }),
+    })
+
+    if (!res.ok) {
+      const raw = await res.text()
+      console.error('Telegram answerCallbackQuery error:', raw)
+      return { ok: false as const, reason: 'request_failed' }
+    }
+
+    return { ok: true as const }
+  } catch (error) {
+    console.error('Telegram answerCallbackQuery failed:', error)
+    return { ok: false as const, reason: 'request_failed' }
   }
 }
 
@@ -148,13 +211,20 @@ export async function notifyParentsByStudentId(input: NotifyParentsInput) {
   try {
     const chatIds = await findLinkedParentChatIds({ adminId: input.adminId, studentId: input.studentId })
     if (!chatIds.length) return
+    const defaultBotChatUrl = buildTelegramBotChatUrl()
 
     for (const chatId of chatIds) {
       await sendTelegramMessage({
         chatId,
         text: input.text,
         buttonText: input.buttonText,
-        buttonUrl: input.buttonUrl
+        buttonUrl: input.buttonUrl,
+        aiButtonText: input.aiButtonText || '🤖 SUNIY INTELLEKT JAVOBI',
+        aiButtonUrl: input.aiButtonUrl || defaultBotChatUrl || undefined,
+        botButtonText: input.botButtonText || "Kevin's Academy bot",
+        botButtonUrl: input.botButtonUrl || defaultBotChatUrl || undefined,
+        modeButtons: true,
+        activeMode: 'bot',
       })
     }
   } catch (error) {

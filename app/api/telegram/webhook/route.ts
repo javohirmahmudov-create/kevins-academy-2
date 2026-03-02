@@ -477,16 +477,16 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
 }
 
 async function askGeminiWithFallback(prompt: string) {
-  const apiKey = process.env.GEMINI_API_KEY || ''
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || ''
   if (!apiKey) return ''
 
-  const configuredModels = (process.env.GEMINI_MODEL || 'gemini-2.0-flash,gemini-1.5-flash')
+  const configuredModels = (process.env.GEMINI_MODEL || 'gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
 
-  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 4500)
-  const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 4500
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 7000)
+  const safeTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 7000
 
   for (const model of configuredModels) {
     try {
@@ -539,6 +539,32 @@ async function askGeminiWithFallback(prompt: string) {
   return ''
 }
 
+function buildAiConversationFallback(input: { question: string; snapshot: StudentInsightSnapshot }) {
+  const q = String(input.question || '').trim()
+  if (!q) {
+    return `Marhamat, ${input.snapshot.parentName}. Savolingizni yozing, men erkin formatda javob beraman.`
+  }
+
+  const trendText = input.snapshot.scoreTrend === 'up'
+    ? 'o‘sish trendida'
+    : input.snapshot.scoreTrend === 'down'
+      ? 'pasayish trendida'
+      : 'barqaror'
+
+  return [
+    `Sizning savolingiz: “${q}”`,
+    '',
+    `Qisqa holat: ${input.snapshot.studentName} uchun davomat ${input.snapshot.attendanceRate}%, oxirgi umumiy ball ${input.snapshot.latestScore.toFixed(1)}%, ball dinamikasi ${trendText}.`,
+    '',
+    'Amaliy tavsiya:',
+    '1) Savolingizga mos bitta aniq maqsad qo‘yamiz (7 kunlik).',
+    '2) Har kuni 25-30 daqiqa nazoratli mashq + qisqa hisobot yuritamiz.',
+    '3) 1 haftadan keyin natijani qayta o‘lchab, keyingi rejani yangilaymiz.',
+    '',
+    'Xohlasangiz, savolingizni biroz batafsilroq yozing — men shu mavzu bo‘yicha aniq, bosqichma-bosqich plan beraman.'
+  ].join('\n')
+}
+
 async function buildParentAssistantReply(input: {
   question: string
   snapshot: StudentInsightSnapshot
@@ -583,13 +609,8 @@ async function buildParentAssistantReply(input: {
     return aiText
   }
 
-  return [
-    '⚠️ KEVIN AI vaqtincha to‘liq javob bera olmadi.',
-    'Iltimos, savolni 5-10 soniyadan keyin qayta yuboring.',
-    '',
-    'Quyida tezkor tizim tahlili:',
-    fastReply,
-  ].join('\n')
+  const fallbackReply = buildAiConversationFallback(input)
+  return fallbackReply || fastReply
 }
 
 function buildBotModeReply(input: { question: string; snapshot: StudentInsightSnapshot }) {

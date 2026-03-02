@@ -114,16 +114,6 @@ function normalizeQuestion(question: string) {
   return String(question || '').trim().toLowerCase()
 }
 
-function isSmallTalkMessage(question: string) {
-  const normalized = normalizeQuestion(question)
-  return /(\b(rahmat|raxmat|thank|thanks|ok|okay|xo'p|xop|tushunarli|zo'r|zor|salom|assalomu|alaykum|hello|hi)\b|[👍🙏👌])/.test(normalized)
-}
-
-function isDirectQuestionMessage(question: string) {
-  const normalized = normalizeQuestion(question)
-  return /(nega|nima|qanday|qancha|qaysi|how|why|what|which|\?)/.test(normalized)
-}
-
 function isBotAllowedQuestion(question: string) {
   const normalized = normalizeQuestion(question)
   return /(davomat|qatnash|kechik|ball|reyting|tolov|to'lov|toʻlov|payment|listening|reading|speaking|writing|grammar|vocabulary|translation|attendance|reja|plan|youtube|link|uyga vazifa|homework|holat)/.test(normalized)
@@ -553,13 +543,6 @@ async function buildParentAssistantReply(input: {
   question: string
   snapshot: StudentInsightSnapshot
 }) {
-  if (isSmallTalkMessage(input.question)) {
-    return [
-      `🙏 Marhamat, ${input.snapshot.parentName}!`,
-      `Farzandingiz ${input.snapshot.studentName} bo‘yicha xohlagan savolni bemalol bering — men aniq tahlil qilib javob beraman.`
-    ].join('\n')
-  }
-
   const fastReply = buildInstantInsightReply(input.question, input.snapshot)
 
   const skillsTable = input.snapshot.skills.length
@@ -569,6 +552,7 @@ async function buildParentAssistantReply(input: {
   const prompt = [
     "Siz Kevin's Academy uchun ota-onalar yordamchi AI'sisiz.",
     'Faqat o\'zbek tilida, sodda va aniq javob bering. Javob tez va amaliy bo\'lsin.',
+    'Foydalanuvchi istalgan mavzuda savol berishi mumkin; savolni rad qilmang va imkon qadar foydali javob bering.',
     'Agar ma\'lumot yetarli bo\'lmasa, taxmin qilmang va nimasi yetishmayotganini ayting.',
     'Maktab ichki ma\'lumotlari asosida bolaning holatini izohlang va amaliy tavsiya bering.',
     '',
@@ -599,14 +583,13 @@ async function buildParentAssistantReply(input: {
     return aiText
   }
 
-  if (!isDirectQuestionMessage(input.question)) {
-    return [
-      `✅ Qabul qilindi.`,
-      `Agar xohlasangiz, hozir ${input.snapshot.studentName} bo‘yicha aniq savol bering: masalan “Listening nega past?” yoki “Qanday reja qilamiz?”`
-    ].join('\n')
-  }
-
-  return fastReply
+  return [
+    '⚠️ KEVIN AI vaqtincha to‘liq javob bera olmadi.',
+    'Iltimos, savolni 5-10 soniyadan keyin qayta yuboring.',
+    '',
+    'Quyida tezkor tizim tahlili:',
+    fastReply,
+  ].join('\n')
 }
 
 function buildBotModeReply(input: { question: string; snapshot: StudentInsightSnapshot }) {

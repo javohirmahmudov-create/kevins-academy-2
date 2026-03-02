@@ -38,11 +38,9 @@ export default function PaymentsPage() {
   const [formData, setFormData] = useState({
     studentId: '',
     amount: 500000,
-    month: 'October 2024',
     status: 'pending' as const,
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
-    dueDate: new Date().toISOString().split('T')[0],
     penaltyPerDay: 10000,
     paidAt: new Date().toISOString().split('T')[0],
     note: ''
@@ -76,7 +74,7 @@ export default function PaymentsPage() {
         studentId: Number(formData.studentId),
         studentName: selectedStudent?.fullName,
         amount: formData.amount,
-        month: formData.month,
+        month: null,
         status: formData.status,
         startDate: formData.startDate,
         endDate: formData.endDate,
@@ -90,11 +88,9 @@ export default function PaymentsPage() {
       setFormData({
         studentId: '',
         amount: 500000,
-        month: 'October 2024',
         status: 'pending',
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0],
-        dueDate: new Date().toISOString().split('T')[0],
         penaltyPerDay: 10000,
         paidAt: new Date().toISOString().split('T')[0],
         note: ''
@@ -206,7 +202,7 @@ export default function PaymentsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
           <input
             type="text"
             value={searchTerm}
@@ -235,7 +231,6 @@ export default function PaymentsPage() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('base_amount')}</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('penalty')}</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('total_due')}</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('month')}</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('payment_window')}</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('paid_at')}</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
@@ -265,7 +260,6 @@ export default function PaymentsPage() {
                     <td className={`px-6 py-4 font-semibold ${(payment.isOverdue || (payment.status === 'overdue')) ? 'text-red-600' : 'text-gray-900'}`}>
                       {formatCurrency(Number(payment.totalDue || payment.amount || 0))}
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{payment.month || '-'}</td>
                     <td className="px-6 py-4 text-gray-600">
                       {payment.startDate ? new Date(payment.startDate).toLocaleDateString() : '-'}
                       {' - '}
@@ -356,7 +350,7 @@ export default function PaymentsPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-8 max-w-md w-full">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full max-h-[92vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('add_payment_record')}</h2>
             <div className="space-y-4">
               <div>
@@ -372,11 +366,7 @@ export default function PaymentsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('amount_uzs')} *</label>
-                <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: parseInt(e.target.value) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('month')} *</label>
-                <input type="text" value={formData.month} onChange={(e) => setFormData({ ...formData, month: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" placeholder="October 2024" />
+                <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value || 0) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_start_date')} *</label>
@@ -384,7 +374,7 @@ export default function PaymentsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_end_date')} *</label>
-                <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value, dueDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+                <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('penalty_per_day_uzs')} *</label>

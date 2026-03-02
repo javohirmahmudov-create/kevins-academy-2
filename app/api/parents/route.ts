@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
-import { buildTelegramStartLink, findTelegramChatIdByPhone, normalizePhoneForDisplay, queueTelegramTask, sendTelegramMessage } from '@/lib/telegram'
+import { buildTelegramStartLink, findTelegramChatIdByPhone, normalizePhoneForDisplay, sendTelegramMessage } from '@/lib/telegram'
 
 async function resolveStudentName(studentId?: string) {
   const parsed = Number(studentId || '')
@@ -18,9 +18,7 @@ async function maybeSendParentWelcome(input: {
 }) {
   if (!input.chatId) return
   const text = `🎉 <b>Xush kelibsiz!</b>\n\nHurmatli <b>${input.parentName || 'ota-ona'}</b>, siz <b>${input.studentName || "o'quvchi"}</b>ning darslarini kuzatish uchun tizimga muvaffaqiyatli qo'shildingiz.`
-  queueTelegramTask(async () => {
-    await sendTelegramMessage({ chatId: input.chatId!, text })
-  })
+  await sendTelegramMessage({ chatId: input.chatId, text })
 }
 
 export async function GET(request: Request) {

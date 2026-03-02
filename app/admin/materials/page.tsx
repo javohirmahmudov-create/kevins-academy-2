@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download, Maximize } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Video, Image as ImageIcon, File, Trash2, Download, Maximize, Rewind, FastForward } from 'lucide-react';
 import { getMaterials, getGroups, addMaterial, Material, Group } from '@/lib/storage';
 import { upload } from '@vercel/blob/client';
 import { useApp } from '@/lib/app-context';
@@ -148,6 +148,14 @@ export default function MaterialsPage() {
     const video = document.getElementById(`material-video-${materialId}`) as HTMLVideoElement | null;
     const wrapper = document.getElementById(`material-video-wrapper-${materialId}`) as HTMLElement | null;
 
+    const openExternal = () => {
+      if (!fileUrl) return;
+      const popup = window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      if (!popup) {
+        window.location.href = fileUrl;
+      }
+    };
+
     const requestFullscreenForElement = (element: any) => {
       if (!element) return false;
       if (element.requestFullscreen) {
@@ -166,21 +174,40 @@ export default function MaterialsPage() {
     };
 
     if (video) {
-      const entered = requestFullscreenForElement(video) || requestFullscreenForElement(wrapper);
+      video.play().catch(() => undefined);
+      const entered = requestFullscreenForElement(wrapper) || requestFullscreenForElement(video);
       if (!entered) {
         const safariVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
         if (safariVideo.webkitEnterFullscreen) {
           safariVideo.webkitEnterFullscreen();
-        } else if (fileUrl) {
-          window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        } else {
+          openExternal();
         }
       }
       return;
     }
 
-    if (fileUrl) {
-      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    openExternal();
+  };
+
+  const seekVideo = (materialId: string | number, seconds: number, fileUrl?: string) => {
+    const video = document.getElementById(`material-video-${materialId}`) as HTMLVideoElement | null;
+
+    if (!video) {
+      if (fileUrl) {
+        const popup = window.open(fileUrl, '_blank', 'noopener,noreferrer');
+        if (!popup) {
+          window.location.href = fileUrl;
+        }
+      }
+      return;
     }
+
+    const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const next = Math.max(0, duration > 0 ? Math.min(duration, current + seconds) : current + seconds);
+    video.currentTime = next;
+    video.play().catch(() => undefined);
   };
 
   return (
@@ -264,11 +291,29 @@ export default function MaterialsPage() {
                     <div className="flex space-x-2">
                       {(material.fileType || material.type) === 'video' && material.fileUrl && (
                         <button
+                          onClick={() => seekVideo(material.id, -10, material.fileUrl)}
+                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100"
+                        >
+                          <Rewind className="w-4 h-4" />
+                          <span className="text-sm">&lt;&lt; 10s</span>
+                        </button>
+                      )}
+                      {(material.fileType || material.type) === 'video' && material.fileUrl && (
+                        <button
                           onClick={() => openVideoFullscreen(material.id, material.fileUrl)}
                           className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
                         >
                           <Maximize className="w-4 h-4" />
                           <span className="text-sm">{t('fullscreen')}</span>
+                        </button>
+                      )}
+                      {(material.fileType || material.type) === 'video' && material.fileUrl && (
+                        <button
+                          onClick={() => seekVideo(material.id, 10, material.fileUrl)}
+                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100"
+                        >
+                          <span className="text-sm">10s &gt;&gt;</span>
+                          <FastForward className="w-4 h-4" />
                         </button>
                       )}
                       {(material.fileType || material.type) !== 'video' && material.fileUrl && (

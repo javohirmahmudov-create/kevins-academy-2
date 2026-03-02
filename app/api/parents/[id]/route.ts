@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
-import { findTelegramChatIdByPhone, queueTelegramTask, sendTelegramMessage } from '@/lib/telegram'
+import { findTelegramChatIdByPhone, sendTelegramMessage } from '@/lib/telegram'
 
 async function resolveStudentName(studentId?: string) {
   const parsed = Number(studentId || '')
@@ -54,9 +54,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     if (becameConnected && nextMetadata.telegramChatId) {
       const studentName = await resolveStudentName(nextMetadata.studentId)
       const text = `🎉 <b>Xush kelibsiz!</b>\n\nHurmatli <b>${body.fullName || existing.fullName || 'ota-ona'}</b>, siz <b>${studentName}</b>ning darslarini kuzatish uchun tizimga muvaffaqiyatli qo'shildingiz.`
-      queueTelegramTask(async () => {
-        await sendTelegramMessage({ chatId: nextMetadata.telegramChatId!, text })
-      })
+      await sendTelegramMessage({ chatId: nextMetadata.telegramChatId, text })
     }
 
     return NextResponse.json(unpackParent(parent))

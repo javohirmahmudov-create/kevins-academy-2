@@ -16,7 +16,7 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from 'recharts';
 
 type ParentSession = Parent & { adminId: string };
 
@@ -444,6 +444,12 @@ export default function ParentDashboard() {
   }
 
   const paymentIsPaid = childSummary.paymentStatus === 'paid';
+  const performanceBarData = skills
+    .map((skill) => ({
+      name: skill.label,
+      score: Number(skill.score || 0),
+    }))
+    .filter((item) => Number.isFinite(item.score));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-slate-900 dark:via-red-900/20 dark:to-slate-900">
@@ -695,6 +701,31 @@ export default function ParentDashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.55 }}
+          className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('skills_progress')}</h3>
+          {performanceBarData.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('not_enough_score_data')}</p>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={performanceBarData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip formatter={(value: number) => [`${Math.round(Number(value || 0))}%`, t('overall_score')]} />
+                  <Legend />
+                  <Bar dataKey="score" name={t('overall_score')} fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
           className="bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 mb-8"
         >
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{t('attendance_history')}</h3>

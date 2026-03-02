@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { GraduationCap, Lock, User, Users, UserCircle } from 'lucide-react';
+import { GraduationCap, Lock, User, Users, UserCircle, Phone, Send } from 'lucide-react';
 import { useApp } from '@/lib/app-context';
 import { getAdmins, createAdmin, getAdminByUsername, updateAdmin } from '@/lib/storage';
 
@@ -266,6 +266,31 @@ export default function Home() {
             </button>
           </form>
 
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="mt-4 bg-white/90 dark:bg-gray-800/70 backdrop-blur-sm rounded-2xl border border-gray-100 dark:border-gray-700 shadow-lg p-4"
+        >
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Aloqa uchun</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-medium">
+              <Phone className="w-4 h-4 text-emerald-600" />
+              <span>+998954403969</span>
+            </div>
+            <a
+              href="https://t.me/Java_backend_09"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors"
+              aria-label="Telegram orqali bog'lanish"
+            >
+              <Send className="w-4 h-4" />
+              <span>Telegram</span>
+            </a>
+          </div>
         </motion.div>
 
         {/* Footer */}

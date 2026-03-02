@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
-import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
-import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
+import { buildParentPortalUrl, buildTelegramBotChatUrl, formatTelegramDate, notifyParentsByStudentId } from '@/lib/telegram'
+import { notifyParentsByStudentIdSms } from '@/lib/sms'
 
 type ScoreType = 'weekly' | 'mock'
 
@@ -315,24 +315,26 @@ export async function POST(request: Request) {
 
       const smsText = `Kevin's Academy: ${scoreDate} kuni ${subject} natijasi. Umumiy ball: ${scoreValue}%. Guruhdagi o‘rni: ${rankingData.rank || 0}-o‘rin.`
       const buttonUrl = buildParentPortalUrl()
+      const botChatUrl = buildTelegramBotChatUrl()
 
-      queueTelegramTask(async () => {
-        await notifyParentsByStudentId({
+      await Promise.allSettled([
+        notifyParentsByStudentId({
           adminId,
           studentId,
           text,
           buttonText: "Batafsil ko'rish",
           buttonUrl,
-        })
-      })
-
-      queueSmsTask(async () => {
-        await notifyParentsByStudentIdSms({
+          aiButtonText: '🤖 SUNIY INTELLEKT JAVOBI',
+          aiButtonUrl: botChatUrl || undefined,
+          botButtonText: "Kevin's Academy bot",
+          botButtonUrl: botChatUrl || undefined,
+        }),
+        notifyParentsByStudentIdSms({
           adminId,
           studentId,
           text: smsText,
         })
-      })
+      ])
     }
 
     return NextResponse.json({ ...score, studentName: student?.fullName })

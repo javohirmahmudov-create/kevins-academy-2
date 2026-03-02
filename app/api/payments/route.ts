@@ -5,6 +5,40 @@ import { buildParentPortalUrl, formatTelegramDate, notifyParentsByStudentId, que
 import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+const overdueReminderSentCache = new Map<string, number>()
+
+function getDayKey(date = new Date()) {
+  const y = date.getUTCFullYear()
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(date.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+async function sendPaymentNotice(input: {
+  adminId?: number | null
+  studentId?: number | null
+  text: string
+  smsText: string
+}) {
+  if (!input.studentId) return
+  const buttonUrl = buildParentPortalUrl()
+  queueTelegramTask(async () => {
+    await notifyParentsByStudentId({
+      adminId: input.adminId,
+      studentId: input.studentId,
+      text: input.text,
+      buttonText: "Batafsil ko'rish",
+      buttonUrl,
+    })
+  })
+  queueSmsTask(async () => {
+    await notifyParentsByStudentIdSms({
+      adminId: input.adminId,
+      studentId: input.studentId,
+      text: input.smsText,
+    })
+  })
+}
 
 function calculatePenalty(input: {
   status?: string | null
@@ -100,6 +134,26 @@ export async function GET(request: Request) {
       }
     })
 
+    const todayKey = getDayKey()
+    for (const item of normalized) {
+      if (!item?.isOverdue || !item?.studentId || item?.status === 'paid') continue
+
+      const cacheKey = `${item.id}:${todayKey}`
+      if (overdueReminderSentCache.has(cacheKey)) continue
+
+      overdueReminderSentCache.set(cacheKey, Date.now())
+
+      const overdueText = `🚨 <b>To'lov muddati o'tgan</b>\n\n📅 To'lov muddati: <b>${formatTelegramDate(item.endDate || item.dueDate)}</b>\n⏳ Kechikish: <b>${Number(item.overdueDays || 0)} kun</b>\n💸 Jami to'lov: <b>${Number(item.totalDue || item.amount || 0).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
+      const overdueSms = `Kevin's Academy: To'lov muddati o'tgan. Kechikish ${Number(item.overdueDays || 0)} kun. Jami: ${Number(item.totalDue || item.amount || 0).toLocaleString('uz-UZ')} so'm.`
+
+      await sendPaymentNotice({
+        adminId,
+        studentId: item.studentId,
+        text: overdueText,
+        smsText: overdueSms,
+      })
+    }
+
     return NextResponse.json(normalized)
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Xatolik' }, { status: 500 })
@@ -145,47 +199,23 @@ export async function POST(request: Request) {
     })
 
     if (studentId) {
-      const buttonUrl = buildParentPortalUrl()
       const nextDueText = formatTelegramDate(endDate || dueDate)
+      const startText = formatTelegramDate(startDate)
+
+      if (startDate || endDate || dueDate) {
+        const text = `🧾 <b>To'lov davri belgilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>\n\nEslatma shu muddat asosida yuboriladi.`
+        const smsText = `Kevin's Academy: To'lov davri belgilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}.`
+        await sendPaymentNotice({ adminId, studentId, text, smsText })
+      }
 
       if (status === 'paid') {
         const text = `💳 <b>To'lov holati</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}.`
-        queueTelegramTask(async () => {
-          await notifyParentsByStudentId({
-            adminId,
-            studentId,
-            text,
-            buttonText: "Batafsil ko'rish",
-            buttonUrl,
-          })
-        })
-        queueSmsTask(async () => {
-          await notifyParentsByStudentIdSms({
-            adminId,
-            studentId,
-            text: smsText,
-          })
-        })
+        await sendPaymentNotice({ adminId, studentId, text, smsText })
       } else if (isDueSoon(status, endDate || dueDate)) {
         const text = `⏰ <b>To'lov eslatmasi</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}.`
-        queueTelegramTask(async () => {
-          await notifyParentsByStudentId({
-            adminId,
-            studentId,
-            text,
-            buttonText: "Batafsil ko'rish",
-            buttonUrl,
-          })
-        })
-        queueSmsTask(async () => {
-          await notifyParentsByStudentIdSms({
-            adminId,
-            studentId,
-            text: smsText,
-          })
-        })
+        await sendPaymentNotice({ adminId, studentId, text, smsText })
       }
     }
 
@@ -245,48 +275,24 @@ export async function PUT(request: Request) {
     const payment = await prisma.payment.update({ where: { id }, data })
 
     if (payment.studentId) {
-      const buttonUrl = buildParentPortalUrl()
       const nextDueDate = payment.endDate || payment.dueDate
       const nextDueText = formatTelegramDate(nextDueDate)
+      const startText = formatTelegramDate(payment.startDate)
+
+      if (payment.startDate || payment.endDate || payment.dueDate) {
+        const text = `🧾 <b>To'lov davri yangilandi</b>\n\n📅 Boshlanish sanasi: <b>${startText}</b>\n📌 Tugash (to'lov) sanasi: <b>${nextDueText}</b>.`
+        const smsText = `Kevin's Academy: To'lov davri yangilandi. Boshlanish: ${startText}. Tugash: ${nextDueText}.`
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
+      }
 
       if (payment.status === 'paid') {
         const text = `✅ <b>To'lov qabul qilindi</b>\n\nTo'lov muvaffaqiyatli qabul qilindi.\n📅 Keyingi to'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov qabul qilindi. Keyingi to'lov sanasi: ${nextDueText}.`
-        queueTelegramTask(async () => {
-          await notifyParentsByStudentId({
-            adminId,
-            studentId: payment.studentId,
-            text,
-            buttonText: "Batafsil ko'rish",
-            buttonUrl,
-          })
-        })
-        queueSmsTask(async () => {
-          await notifyParentsByStudentIdSms({
-            adminId,
-            studentId: payment.studentId,
-            text: smsText,
-          })
-        })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
       } else if (isDueSoon(payment.status, nextDueDate)) {
         const text = `🔔 <b>To'lov muddati yaqin</b>\n\nTo'lov muddati yaqinlashmoqda.\n📅 To'lov sanasi: <b>${nextDueText}</b>.`
         const smsText = `Kevin's Academy: To'lov muddati yaqin. To'lov sanasi: ${nextDueText}.`
-        queueTelegramTask(async () => {
-          await notifyParentsByStudentId({
-            adminId,
-            studentId: payment.studentId,
-            text,
-            buttonText: "Batafsil ko'rish",
-            buttonUrl,
-          })
-        })
-        queueSmsTask(async () => {
-          await notifyParentsByStudentIdSms({
-            adminId,
-            studentId: payment.studentId,
-            text: smsText,
-          })
-        })
+        await sendPaymentNotice({ adminId, studentId: payment.studentId, text, smsText })
       }
     }
 

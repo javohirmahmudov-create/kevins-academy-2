@@ -30,6 +30,7 @@ export default function MaterialsPage() {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -46,11 +47,36 @@ export default function MaterialsPage() {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      // Auto-set title from filename if empty
       if (!formData.title) {
-        setFormData({ ...formData, title: file.name });
+        setFormData((prev) => ({ ...prev, title: file.name }));
       }
     }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    if (!formData.title) {
+      setFormData((prev) => ({ ...prev, title: file.name }));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
   };
 
   const handleAddMaterial = async () => {
@@ -120,13 +146,28 @@ export default function MaterialsPage() {
 
   const openVideoFullscreen = (materialId: string | number, fileUrl?: string) => {
     const video = document.getElementById(`material-video-${materialId}`) as HTMLVideoElement | null;
+    const wrapper = document.getElementById(`material-video-wrapper-${materialId}`) as HTMLElement | null;
+
+    const requestFullscreenForElement = (element: any) => {
+      if (!element) return false;
+      if (element.requestFullscreen) {
+        element.requestFullscreen().catch(() => undefined);
+        return true;
+      }
+      if (element.webkitRequestFullscreen) {
+        element.webkitRequestFullscreen();
+        return true;
+      }
+      if (element.msRequestFullscreen) {
+        element.msRequestFullscreen();
+        return true;
+      }
+      return false;
+    };
 
     if (video) {
-      if (video.requestFullscreen) {
-        video.requestFullscreen().catch(() => {
-          if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
-        });
-      } else {
+      const entered = requestFullscreenForElement(video) || requestFullscreenForElement(wrapper);
+      if (!entered) {
         const safariVideo = video as HTMLVideoElement & { webkitEnterFullscreen?: () => void };
         if (safariVideo.webkitEnterFullscreen) {
           safariVideo.webkitEnterFullscreen();
@@ -201,14 +242,22 @@ export default function MaterialsPage() {
                       )}
                     </div>
                     {(material.fileType || material.type) === 'video' && material.fileUrl && (
-                      <div className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-black/5">
+                      <div
+                        id={`material-video-wrapper-${material.id}`}
+                        className="mb-3 overflow-hidden rounded-xl border border-gray-200 bg-black/5"
+                      >
+                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs text-gray-700">
+                          {material.content?.trim() || `${material.title} — video material`}
+                        </div>
                         <video
                           id={`material-video-${material.id}`}
                           src={material.fileUrl}
                           controls
                           width="100%"
                           className="w-full h-auto max-h-72 object-contain"
-                          preload="metadata"
+                          preload="auto"
+                          playsInline
+                          controlsList="nodownload noplaybackrate"
                         />
                       </div>
                     )}
@@ -265,11 +314,16 @@ export default function MaterialsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('file')} *</label>
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-green-500 transition-colors">
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${isDragOver ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-green-500'}`}
+                >
                   <input
                     type="file"
                     onChange={handleFileSelect}
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.avi,.mov,.mp3,.wav,.jpg,.jpeg,.png,.gif,.txt,.zip,.rar"
+                    accept="*/*"
                     className="hidden"
                     id="file-upload"
                   />
@@ -289,12 +343,7 @@ export default function MaterialsPage() {
                             {formData.type === 'image' && t('click_upload_image')}
                             {formData.type === 'text' && t('click_upload_text')}
                           </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formData.type === 'pdf' && t('pdf_documents')}
-                            {formData.type === 'video' && 'MP4, AVI, MOV'}
-                            {formData.type === 'image' && 'JPG, PNG, GIF'}
-                            {formData.type === 'text' && 'TXT, DOC, DOCX'}
-                          </p>
+                          <p className="text-xs text-gray-400 mt-1">Barcha fayl turlari qo‘llab-quvvatlanadi (drag & drop ishlaydi)</p>
                           <p className="text-xs text-green-600 mt-1">✓ {t('any_size_supported')}</p>
                         </>
                       )}

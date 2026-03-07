@@ -88,6 +88,8 @@ export default function StudentVocabularyPage() {
   const [recordedPreviewUrl, setRecordedPreviewUrl] = useState('')
   const [cameraError, setCameraError] = useState('')
   const [recordingWarningSoundEnabled, setRecordingWarningSoundEnabled] = useState(true)
+  const [remoteStreamReady, setRemoteStreamReady] = useState(false)
+  const [duelConnectionStatus, setDuelConnectionStatus] = useState<'idle' | 'waiting' | 'connecting' | 'connected' | 'disconnected' | 'error'>('idle')
 
   const questionStartedAtRef = useRef(0)
   const questionTimeoutRef = useRef<any>(null)
@@ -96,8 +98,14 @@ export default function StudentVocabularyPage() {
   const activeDuelSeenRef = useRef<number>(0)
   const [nowTick, setNowTick] = useState(Date.now())
   const liveVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const remoteMediaStreamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const signalPollingRef = useRef<any>(null)
+  const signalCursorRef = useRef(0)
+  const sentOfferRef = useRef(false)
   const recordingChunksRef = useRef<BlobPart[]>([])
   const recordingIntervalRef = useRef<any>(null)
   const recordedPreviewUrlRef = useRef('')
@@ -247,7 +255,7 @@ export default function StudentVocabularyPage() {
       if (!response.ok) throw new Error(String(payload?.error || 'Duel javobi yuborilmadi'))
       await loadDuels()
       if (action === 'accept') {
-        setTab('proctor')
+        setTab('peer')
       }
     } catch (error: any) {
       alert(String(error?.message || 'Duel javobi yuborilmadi'))
@@ -283,19 +291,26 @@ export default function StudentVocabularyPage() {
     if (!activeDuel?.id || !student?.id) return
     if (activeDuelSeenRef.current === activeDuel.id) return
     activeDuelSeenRef.current = activeDuel.id
-    setTab('proctor')
-    if (!quizRunning && quiz.length > 0) {
-      setTimeout(() => {
-        setTab('proctor')
-        responsesRef.current = []
-        setResult(null)
-        setQuizError('')
-        setQuizRunning(true)
-        setQuizIndex(0)
-        setAnswerText('')
-      }, 120)
+    setTab('peer')
+  }, [activeDuel?.id, student?.id])
+
+  useEffect(() => {
+    if (!activeDuel?.id || !student?.id) return
+    const partnerId = Number(activeDuel.challengerId) === Number(student.id)
+      ? Number(activeDuel.opponentId)
+      : Number(activeDuel.challengerId)
+
+    if (!partnerId || Number(pairPartner?.id) === partnerId) return
+    const found = pairCandidates.find((item) => Number(item.id) === partnerId)
+    if (found) {
+      setPairPartner(found)
+      return
     }
-  }, [activeDuel?.id, quiz.length, quizRunning, student?.id])
+    const fallbackName = Number(activeDuel.challengerId) === Number(student.id)
+      ? String(activeDuel.opponentName || `#${partnerId}`)
+      : String(activeDuel.challengerName || `#${partnerId}`)
+    setPairPartner({ id: partnerId, fullName: fallbackName })
+  }, [activeDuel?.challengerId, activeDuel?.challengerName, activeDuel?.id, activeDuel?.opponentId, activeDuel?.opponentName, pairCandidates, pairPartner?.id, student?.id])
 
   const currentQuizItem = quiz[quizIndex] || null
 
@@ -390,9 +405,21 @@ export default function StudentVocabularyPage() {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop()
       }
+      if (signalPollingRef.current) {
+        clearInterval(signalPollingRef.current)
+        signalPollingRef.current = null
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close()
+        peerConnectionRef.current = null
+      }
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop())
         mediaStreamRef.current = null
+      }
+      if (remoteMediaStreamRef.current) {
+        remoteMediaStreamRef.current.getTracks().forEach((track) => track.stop())
+        remoteMediaStreamRef.current = null
       }
       if (recordedPreviewUrlRef.current) {
         URL.revokeObjectURL(recordedPreviewUrlRef.current)
@@ -410,6 +437,16 @@ export default function StudentVocabularyPage() {
     videoElement.srcObject = stream
     void videoElement.play().catch(() => undefined)
   }, [cameraActive])
+
+  useEffect(() => {
+    if (!cameraActive) return
+    const videoElement = remoteVideoRef.current
+    const stream = remoteMediaStreamRef.current
+    if (!videoElement || !stream) return
+
+    videoElement.srcObject = stream
+    void videoElement.play().catch(() => undefined)
+  }, [cameraActive, remoteStreamReady])
 
   useEffect(() => {
     if (!recordingActive) {
@@ -531,6 +568,24 @@ export default function StudentVocabularyPage() {
     setPairPartner(random || null)
   }
 
+  const sendDuelSignal = useCallback(async (duelId: number, type: 'offer' | 'answer' | 'candidate' | 'hangup', payload: any) => {
+    if (!student?.id || !duelId) return
+    try {
+      await fetch('/api/vocabulary/duels/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          duelId,
+          studentId: student.id,
+          type,
+          payload,
+        }),
+      })
+    } catch {
+      // ignore signaling send errors, polling will retry
+    }
+  }, [student?.id])
+
   const getSupportedRecorderMimeType = () => {
     if (typeof MediaRecorder === 'undefined') return ''
     const preferredTypes = [
@@ -555,7 +610,25 @@ export default function StudentVocabularyPage() {
     recorder.stop()
   }
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
+    if (activeDuel?.id && student?.id) {
+      void sendDuelSignal(Number(activeDuel.id), 'hangup', { reason: 'camera_off' })
+    }
+    if (signalPollingRef.current) {
+      clearInterval(signalPollingRef.current)
+      signalPollingRef.current = null
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close()
+      peerConnectionRef.current = null
+    }
+    if (remoteMediaStreamRef.current) {
+      remoteMediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      remoteMediaStreamRef.current = null
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null
+    }
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop())
       mediaStreamRef.current = null
@@ -563,10 +636,14 @@ export default function StudentVocabularyPage() {
     if (liveVideoRef.current) {
       liveVideoRef.current.srcObject = null
     }
+    signalCursorRef.current = 0
+    sentOfferRef.current = false
+    setRemoteStreamReady(false)
+    setDuelConnectionStatus(activeDuel?.id ? 'waiting' : 'idle')
     setCameraActive(false)
-  }
+  }, [activeDuel?.id, sendDuelSignal, student?.id])
 
-  const turnOnCamera = async () => {
+  const turnOnCamera = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setCameraError('Brauzeringiz kamerani qo‘llab-quvvatlamaydi')
       return
@@ -586,12 +663,165 @@ export default function StudentVocabularyPage() {
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream
       }
+      signalCursorRef.current = 0
+      sentOfferRef.current = false
+      setDuelConnectionStatus(activeDuel?.id ? 'connecting' : 'idle')
       setCameraActive(true)
     } catch {
       setCameraError('Kameraga ruxsat berilmadi yoki kamera topilmadi')
+      setDuelConnectionStatus('error')
       setCameraActive(false)
     }
-  }
+  }, [activeDuel?.id])
+
+  useEffect(() => {
+    if (!activeDuel?.id || tab !== 'peer' || cameraActive) return
+    void turnOnCamera()
+  }, [activeDuel?.id, cameraActive, tab, turnOnCamera])
+
+  useEffect(() => {
+    if (!activeDuel?.id || !cameraActive || !student?.id || !mediaStreamRef.current) {
+      if (!activeDuel?.id) {
+        setDuelConnectionStatus('idle')
+      }
+      return
+    }
+
+    let stopped = false
+    const duelId = Number(activeDuel.id)
+    const isCaller = Number(activeDuel.challengerId) === Number(student.id)
+    setDuelConnectionStatus('connecting')
+
+    const connection = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    })
+    peerConnectionRef.current = connection
+
+    const remoteStream = new MediaStream()
+    remoteMediaStreamRef.current = remoteStream
+    setRemoteStreamReady(false)
+
+    const localStream = mediaStreamRef.current
+    localStream.getTracks().forEach((track) => {
+      connection.addTrack(track, localStream)
+    })
+
+    connection.ontrack = (event) => {
+      const sourceStream = event.streams?.[0]
+      if (sourceStream) {
+        sourceStream.getTracks().forEach((track) => {
+          remoteStream.addTrack(track)
+        })
+      } else if (event.track) {
+        remoteStream.addTrack(event.track)
+      }
+      const hasLiveRemote = remoteStream.getVideoTracks().some((track) => track.readyState === 'live')
+      setRemoteStreamReady(hasLiveRemote)
+      setDuelConnectionStatus(hasLiveRemote ? 'connected' : 'waiting')
+    }
+
+    connection.onicecandidate = (event) => {
+      if (!event.candidate) return
+      void sendDuelSignal(duelId, 'candidate', event.candidate.toJSON())
+    }
+
+    connection.onconnectionstatechange = () => {
+      const state = connection.connectionState
+      if (state === 'connected') {
+        setDuelConnectionStatus('connected')
+      } else if (state === 'connecting') {
+        setDuelConnectionStatus('connecting')
+      } else if (state === 'disconnected' || state === 'failed') {
+        setDuelConnectionStatus('disconnected')
+        setRemoteStreamReady(false)
+      } else if (state === 'closed') {
+        setDuelConnectionStatus('waiting')
+      }
+    }
+
+    const ensureOffer = async () => {
+      if (!isCaller || sentOfferRef.current) return
+      const offer = await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+      await connection.setLocalDescription(offer)
+      sentOfferRef.current = true
+      await sendDuelSignal(duelId, 'offer', offer)
+    }
+
+    const processSignals = async () => {
+      try {
+        const response = await fetch(`/api/vocabulary/duels/signal?duelId=${duelId}&studentId=${encodeURIComponent(String(student.id))}&since=${signalCursorRef.current}`)
+        const payload = await response.json()
+        if (!response.ok || stopped) return
+        const signals = Array.isArray(payload?.signals) ? payload.signals : []
+        for (const signal of signals) {
+          const type = String(signal?.type || '').toLowerCase()
+          const signalPayload = signal?.payload
+          const at = Number(signal?.at || 0)
+          if (at > signalCursorRef.current) {
+            signalCursorRef.current = at
+          }
+
+          if (type === 'offer' && !isCaller && signalPayload) {
+            await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+            const answer = await connection.createAnswer()
+            await connection.setLocalDescription(answer)
+            await sendDuelSignal(duelId, 'answer', answer)
+            setDuelConnectionStatus('connecting')
+          } else if (type === 'answer' && isCaller && signalPayload) {
+            if (!connection.currentRemoteDescription) {
+              await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+            }
+            setDuelConnectionStatus('connecting')
+          } else if (type === 'candidate' && signalPayload) {
+            try {
+              await connection.addIceCandidate(new RTCIceCandidate(signalPayload))
+            } catch {
+              // ignore invalid candidate chunks
+            }
+          } else if (type === 'hangup') {
+            setRemoteStreamReady(false)
+            setDuelConnectionStatus('waiting')
+          }
+        }
+      } catch {
+        if (!stopped) {
+          setDuelConnectionStatus((prev) => (prev === 'connected' ? prev : 'disconnected'))
+        }
+      }
+    }
+
+    void ensureOffer()
+    void processSignals()
+    if (signalPollingRef.current) {
+      clearInterval(signalPollingRef.current)
+      signalPollingRef.current = null
+    }
+    signalPollingRef.current = setInterval(() => {
+      void processSignals()
+    }, 1200)
+    const remoteVideoElement = remoteVideoRef.current
+
+    return () => {
+      stopped = true
+      if (signalPollingRef.current) {
+        clearInterval(signalPollingRef.current)
+        signalPollingRef.current = null
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close()
+        peerConnectionRef.current = null
+      }
+      if (remoteMediaStreamRef.current) {
+        remoteMediaStreamRef.current.getTracks().forEach((track) => track.stop())
+        remoteMediaStreamRef.current = null
+      }
+      if (remoteVideoElement) {
+        remoteVideoElement.srcObject = null
+      }
+      setRemoteStreamReady(false)
+      setDuelConnectionStatus('waiting')
+    }
+  }, [activeDuel?.challengerId, activeDuel?.id, cameraActive, sendDuelSignal, student?.id])
 
   const startPeerRecording = () => {
     if (!mediaStreamRef.current || recordingActive) return
@@ -681,6 +911,15 @@ export default function StudentVocabularyPage() {
   }, [recordingRemainingSeconds])
 
   const recordingWarning = recordingActive && recordingRemainingSeconds <= 10
+
+  const duelStatusLabel = useMemo(() => {
+    if (!activeDuel?.id) return ''
+    if (duelConnectionStatus === 'connected' && remoteStreamReady) return 'Ulanish: Jonli'
+    if (duelConnectionStatus === 'connecting') return 'Ulanish: bog‘lanmoqda...'
+    if (duelConnectionStatus === 'disconnected') return 'Ulanish uzildi, qayta ulanmoqda...'
+    if (duelConnectionStatus === 'error') return 'Ulanish xatoligi'
+    return 'Sherigingiz kutilmoqda...'
+  }, [activeDuel?.id, duelConnectionStatus, remoteStreamReady])
 
   const uploadRecording = async () => {
     if (!recordingFile || !student?.group) return
@@ -928,7 +1167,7 @@ export default function StudentVocabularyPage() {
 
             {activeDuel ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
-                Aktiv duel: {activeDuel.challengerName} vs {activeDuel.opponentName}. Proctor tabiga o‘ting va quizni boshlang.
+                Aktiv duel: {activeDuel.challengerName} vs {activeDuel.opponentName}. Jonli video muloqot boshlanishi uchun kamera yoqilgan bo‘lishi kerak.
               </div>
             ) : null}
 
@@ -1011,9 +1250,27 @@ export default function StudentVocabularyPage() {
                     <p className="text-xs text-red-600 dark:text-red-300">{cameraError}</p>
                   ) : null}
 
+                  {activeDuel ? (
+                    <p className={`text-xs ${remoteStreamReady ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}`}>
+                      {duelStatusLabel}
+                    </p>
+                  ) : null}
+
                   {cameraActive ? (
                     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black">
-                      <video ref={liveVideoRef} autoPlay playsInline muted className="w-full max-h-72 object-cover" />
+                      {activeDuel ? (
+                        <>
+                          <video ref={remoteVideoRef} autoPlay playsInline className="w-full max-h-72 object-cover" />
+                          <video ref={liveVideoRef} autoPlay playsInline muted className="absolute bottom-3 right-3 h-24 w-32 sm:h-28 sm:w-40 object-cover rounded-lg border border-white/70 shadow-lg bg-black" />
+                          {!remoteStreamReady ? (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-white text-sm font-medium">
+                              Sherigingiz kutilmoqda...
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <video ref={liveVideoRef} autoPlay playsInline muted className="w-full max-h-72 object-cover" />
+                      )}
                       <div className={`absolute top-2 left-2 rounded-md px-2 py-1 text-xs text-white ${recordingWarning ? 'bg-red-600 animate-pulse' : 'bg-black/60'}`}>
                         {recordingActive ? `⏱ ${recordingCountdownLabel}` : 'Tayyor 2:00'}
                       </div>

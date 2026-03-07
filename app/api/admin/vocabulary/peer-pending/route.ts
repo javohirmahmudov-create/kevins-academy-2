@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url)
-    const status = String(url.searchParams.get('status') || 'pending').trim().toLowerCase()
+    const status = String(url.searchParams.get('status') || 'suspicious').trim().toLowerCase()
 
     const rows = await prisma.score.findMany({
       where: {
@@ -36,9 +36,11 @@ export async function GET(request: Request) {
         : null
       const peerStatus = String(peer?.status || 'pending_confirmation').toLowerCase()
       if (status === 'all') return true
-      if (status === 'approved') return peerStatus === 'approved'
+      if (status === 'approved') return peerStatus === 'approved' || peerStatus === 'auto_approved'
       if (status === 'rejected') return peerStatus === 'rejected'
-      return peerStatus === 'pending_confirmation'
+      if (status === 'pending') return peerStatus === 'pending_confirmation'
+      if (status === 'auto') return peerStatus === 'auto_approved'
+      return peerStatus === 'needs_review'
     })
 
     return NextResponse.json(filtered)

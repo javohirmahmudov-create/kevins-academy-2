@@ -2,9 +2,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Brain, Mic, RefreshCw, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Bell, Brain, Mic, RefreshCw, Search, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
 import { useApp } from '@/lib/app-context'
 
 type QuizItem = {
@@ -21,8 +21,25 @@ type FlashcardItem = {
   nextReviewAt: string
 }
 
+type PartnerItem = {
+  id: number
+  fullName: string
+  group?: string
+}
+
+type DuelItem = {
+  id: number
+  challengerId: number
+  opponentId: number
+  status: string
+  challengerName?: string
+  opponentName?: string
+  incoming?: boolean
+}
+
 export default function StudentVocabularyPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { currentStudent } = useApp()
 
   const [student, setStudent] = useState<any>(null)
@@ -46,10 +63,18 @@ export default function StudentVocabularyPage() {
 
   const [pairLoading, setPairLoading] = useState(false)
   const [pairPartner, setPairPartner] = useState<any>(null)
+  const [pairCandidates, setPairCandidates] = useState<PartnerItem[]>([])
+  const [partnerSearch, setPartnerSearch] = useState('')
   const [peerScore, setPeerScore] = useState(80)
   const [peerNote, setPeerNote] = useState('')
   const [peerRecordingUrl, setPeerRecordingUrl] = useState('')
   const [peerSubmitting, setPeerSubmitting] = useState(false)
+
+  const [duelLoading, setDuelLoading] = useState(false)
+  const [duelActionLoading, setDuelActionLoading] = useState(false)
+  const [pendingIncomingDuels, setPendingIncomingDuels] = useState<DuelItem[]>([])
+  const [pendingOutgoingDuels, setPendingOutgoingDuels] = useState<DuelItem[]>([])
+  const [activeDuel, setActiveDuel] = useState<DuelItem | null>(null)
 
   const [recordingFile, setRecordingFile] = useState<File | null>(null)
   const [uploadingRecording, setUploadingRecording] = useState(false)
@@ -58,6 +83,7 @@ export default function StudentVocabularyPage() {
   const questionTimeoutRef = useRef<any>(null)
   const responsesRef = useRef<Array<{ wordId: string; answer: string; elapsedMs: number }>>([])
   const recognitionRef = useRef<any>(null)
+  const activeDuelSeenRef = useRef<number>(0)
   const [nowTick, setNowTick] = useState(Date.now())
 
   useEffect(() => {
@@ -120,18 +146,124 @@ export default function StudentVocabularyPage() {
       const payload = await response.json()
       if (!response.ok) throw new Error(String(payload?.error || 'Pairing xatoligi'))
       setPairPartner(payload?.myPartner || null)
+      setPairCandidates(Array.isArray(payload?.students) ? payload.students : [])
     } catch {
       setPairPartner(null)
+      setPairCandidates([])
     } finally {
       setPairLoading(false)
     }
   }, [student?.group, student?.id])
 
+  const loadDuels = useCallback(async () => {
+    if (!student?.id) return
+    setDuelLoading(true)
+    try {
+      const response = await fetch(`/api/vocabulary/duels?studentId=${encodeURIComponent(String(student.id))}`)
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Duel ma’lumotlari yuklanmadi'))
+      setPendingIncomingDuels(Array.isArray(payload?.pendingIncoming) ? payload.pendingIncoming : [])
+      setPendingOutgoingDuels(Array.isArray(payload?.pendingOutgoing) ? payload.pendingOutgoing : [])
+      setActiveDuel(payload?.activeDuel || null)
+    } catch {
+      setPendingIncomingDuels([])
+      setPendingOutgoingDuels([])
+      setActiveDuel(null)
+    } finally {
+      setDuelLoading(false)
+    }
+  }, [student?.id])
+
+  const createDuelInvite = useCallback(async (mode: 'manual' | 'random') => {
+    if (!student?.id) return
+    if (mode === 'manual' && !pairPartner?.id) {
+      alert('Avval partner tanlang')
+      return
+    }
+
+    setDuelActionLoading(true)
+    try {
+      const response = await fetch('/api/vocabulary/duels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.id,
+          opponentId: mode === 'manual' ? pairPartner.id : undefined,
+          mode,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Duel yuborilmadi'))
+      await loadDuels()
+      alert(payload?.existed ? 'Bu juftlikda duel allaqachon bor' : 'Duel chaqiruvi yuborildi ✅')
+    } catch (error: any) {
+      alert(String(error?.message || 'Duel yuborilmadi'))
+    } finally {
+      setDuelActionLoading(false)
+    }
+  }, [loadDuels, pairPartner?.id, student?.id])
+
+  const respondToDuel = useCallback(async (duelId: number, action: 'accept' | 'reject') => {
+    if (!student?.id || !duelId) return
+    setDuelActionLoading(true)
+    try {
+      const response = await fetch('/api/vocabulary/duels/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duelId, studentId: student.id, action }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Duel javobi yuborilmadi'))
+      await loadDuels()
+      if (action === 'accept') {
+        setTab('proctor')
+      }
+    } catch (error: any) {
+      alert(String(error?.message || 'Duel javobi yuborilmadi'))
+    } finally {
+      setDuelActionLoading(false)
+    }
+  }, [loadDuels, student?.id])
+
   useEffect(() => {
     if (!student?.id) return
     loadSession()
     loadPairing()
-  }, [student?.id, loadPairing, loadSession])
+    loadDuels()
+  }, [student?.id, loadDuels, loadPairing, loadSession])
+
+  useEffect(() => {
+    const requestedTab = String(searchParams.get('tab') || '').trim().toLowerCase()
+    if (requestedTab === 'peer' || requestedTab === 'proctor' || requestedTab === 'flashcards') {
+      setTab(requestedTab)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!student?.id) return
+    const timer = setInterval(() => {
+      loadDuels()
+    }, 12000)
+    return () => clearInterval(timer)
+  }, [loadDuels, student?.id])
+
+  useEffect(() => {
+    if (!activeDuel?.id || !student?.id) return
+    if (activeDuelSeenRef.current === activeDuel.id) return
+    activeDuelSeenRef.current = activeDuel.id
+    setTab('proctor')
+    if (!quizRunning && quiz.length > 0) {
+      setTimeout(() => {
+        setTab('proctor')
+        responsesRef.current = []
+        setResult(null)
+        setQuizError('')
+        setQuizRunning(true)
+        setQuizIndex(0)
+        setAnswerText('')
+      }, 120)
+    }
+  }, [activeDuel?.id, quiz.length, quizRunning, student?.id])
 
   const currentQuizItem = quiz[quizIndex] || null
 
@@ -287,6 +419,21 @@ export default function StudentVocabularyPage() {
 
   const currentFlashcard = flashcards[flashcardIndex] || null
 
+  const filteredPartners = useMemo(() => {
+    const query = partnerSearch.trim().toLowerCase()
+    if (!query) return pairCandidates
+    return pairCandidates.filter((item) => String(item.fullName || '').toLowerCase().includes(query))
+  }, [pairCandidates, partnerSearch])
+
+  const chooseRandomPartner = () => {
+    if (!pairCandidates.length) {
+      setPairPartner(null)
+      return
+    }
+    const random = pairCandidates[Math.floor(Math.random() * pairCandidates.length)]
+    setPairPartner(random || null)
+  }
+
   const uploadRecording = async () => {
     if (!recordingFile || !student?.group) return
     setUploadingRecording(true)
@@ -329,6 +476,7 @@ export default function StudentVocabularyPage() {
         body: JSON.stringify({
           studentId: student.id,
           partnerId: pairPartner.id,
+          duelId: activeDuel?.id || undefined,
           score: peerScore,
           note: peerNote,
           recordingUrl: peerRecordingUrl || undefined,
@@ -336,8 +484,15 @@ export default function StudentVocabularyPage() {
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(String(payload?.error || 'Jo‘natishda xatolik'))
-      alert('Natija yuborildi. Endi admin tasdiqlaydi ✅')
+      if (payload?.status === 'auto_approved') {
+        alert('Natija yuborildi va avtomatik tasdiqlandi ✅')
+      } else if (payload?.status === 'needs_review') {
+        alert('Natija yuborildi. Shubhali holat admin ko‘rigiga tushdi ⚠️')
+      } else {
+        alert('Natija yuborildi. Partner javobi kelgach auto-check qilinadi ✅')
+      }
       setPeerNote('')
+      await loadDuels()
     } catch (error: any) {
       alert(String(error?.message || 'Jo‘natishda xatolik'))
     } finally {
@@ -350,14 +505,14 @@ export default function StudentVocabularyPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950">
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-2">
           <button
             onClick={() => router.push('/student')}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
           >
             <ArrowLeft className="w-4 h-4" /> Orqaga
           </button>
-          <h1 className="text-lg font-bold text-gray-900 dark:text-white inline-flex items-center gap-2">
+          <h1 className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white inline-flex items-center gap-2 order-3 sm:order-none w-full sm:w-auto">
             <Brain className="w-5 h-5 text-indigo-500" /> AI Vocabulary Proctor
           </h1>
           <button
@@ -369,7 +524,7 @@ export default function StudentVocabularyPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="rounded-2xl border border-blue-100 bg-white dark:bg-gray-900 dark:border-gray-800 p-4">
             <p className="text-xs text-gray-500">Total words</p>
@@ -385,10 +540,10 @@ export default function StudentVocabularyPage() {
           </div>
         </div>
 
-        <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-1">
-          <button onClick={() => setTab('proctor')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'proctor' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>AI Proctor</button>
-          <button onClick={() => setTab('peer')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'peer' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Peer Checking</button>
-          <button onClick={() => setTab('flashcards')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'flashcards' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Flashcards</button>
+        <div className="grid grid-cols-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-1 w-full sm:inline-grid">
+          <button onClick={() => setTab('proctor')} className={`px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm ${tab === 'proctor' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>AI Proctor</button>
+          <button onClick={() => setTab('peer')} className={`px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm ${tab === 'peer' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Peer Checking</button>
+          <button onClick={() => setTab('flashcards')} className={`px-2 sm:px-4 py-2 rounded-lg text-xs sm:text-sm ${tab === 'flashcards' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Flashcards</button>
         </div>
 
         {tab === 'proctor' && (
@@ -425,6 +580,14 @@ export default function StudentVocabularyPage() {
 
             {quizError ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-sm">{quizError}</div>
+            ) : null}
+
+            {!loading && !quizRunning && quiz.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-indigo-200 dark:border-indigo-800 p-4 text-sm">
+                <p className="font-medium text-gray-900 dark:text-white">Quiz uchun so‘z topilmadi</p>
+                <p className="text-gray-500 mt-1">Admin material biriktirgach, bu yerdan qayta boshlang.</p>
+                <button onClick={loadSession} className="mt-3 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5">Qayta yuklash</button>
+              </div>
             ) : null}
 
             {quizRunning && currentQuizItem ? (
@@ -467,14 +630,79 @@ export default function StudentVocabularyPage() {
         )}
 
         {tab === 'peer' && (
-          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-4">
-            <div className="flex items-center justify-between">
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white inline-flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> Peer-to-Peer Checking</h2>
-              <button onClick={loadPairing} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm">Random juftlik</button>
+              <div className="flex items-center gap-2">
+                <button onClick={chooseRandomPartner} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm">Random tanlash</button>
+                <button onClick={loadPairing} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm">Yangilash</button>
+              </div>
+            </div>
+
+            {pendingIncomingDuels.length > 0 ? (
+              <div className="rounded-xl border border-red-200 bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-950/30 dark:to-amber-950/20 p-4 space-y-3">
+                <p className="text-sm font-semibold text-red-700 dark:text-red-300 inline-flex items-center gap-2"><Bell className="w-4 h-4" /> Yangi duel chaqiruvi</p>
+                {pendingIncomingDuels.map((duel) => (
+                  <div key={duel.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <p className="text-gray-700 dark:text-gray-200"><span className="font-semibold">{duel.challengerName || 'Partner'}</span> sizni duelga chaqirdi</p>
+                    <div className="flex items-center gap-2">
+                      <button disabled={duelActionLoading} onClick={() => respondToDuel(duel.id, 'accept')} className="rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-xs sm:text-sm disabled:opacity-50">Qabul qilish</button>
+                      <button disabled={duelActionLoading} onClick={() => respondToDuel(duel.id, 'reject')} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-xs sm:text-sm disabled:opacity-50">Rad etish</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {activeDuel ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
+                Aktiv duel: {activeDuel.challengerName} vs {activeDuel.opponentName}. Proctor tabiga o‘ting va quizni boshlang.
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-3 space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Partnerni qo‘lda tanlang va duelga chaqiring</p>
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  value={partnerSearch}
+                  onChange={(event) => setPartnerSearch(event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent pl-9 pr-3 py-2 text-sm"
+                  placeholder="Student nomi bo‘yicha qidirish"
+                />
+              </div>
+              <div className="max-h-40 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                {filteredPartners.length === 0 ? (
+                  <p className="text-sm text-gray-500 p-3">Qidiruv bo‘yicha student topilmadi.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {filteredPartners.map((partner) => (
+                      <button
+                        key={partner.id}
+                        onClick={() => setPairPartner(partner)}
+                        className={`w-full text-left px-3 py-2 text-sm ${Number(pairPartner?.id) === Number(partner.id) ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}
+                      >
+                        {partner.fullName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button disabled={duelActionLoading || !pairPartner?.id} onClick={() => createDuelInvite('manual')} className="rounded-lg bg-red-600 text-white px-3 py-1.5 text-sm disabled:opacity-50">Duelga chaqirish</button>
+                <button disabled={duelActionLoading} onClick={() => createDuelInvite('random')} className="rounded-lg border border-amber-300 text-amber-700 dark:text-amber-300 px-3 py-1.5 text-sm disabled:opacity-50">Random duel</button>
+                {duelLoading ? <span className="text-xs text-gray-500">Duel holati yangilanmoqda...</span> : null}
+              </div>
+              {pendingOutgoingDuels.length > 0 ? <p className="text-xs text-gray-500">Kutilyapti: {pendingOutgoingDuels.length} ta yuborilgan chaqiruv.</p> : null}
             </div>
 
             {pairLoading ? <p className="text-sm text-gray-500">Juftlik yuklanmoqda...</p> : null}
-            {!pairLoading && !pairPartner ? <p className="text-sm text-amber-600">Juft topilmadi. Guruhingizda kamida 2 ta student bo‘lishi kerak.</p> : null}
+            {!pairLoading && !pairPartner ? (
+              <div className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 p-4 text-sm">
+                <p className="text-amber-700 dark:text-amber-300 font-medium">Hali partner tanlanmagan</p>
+                <p className="text-gray-500 mt-1">Yuqoridan student tanlang yoki random tugmasini bosing.</p>
+              </div>
+            ) : null}
             {pairPartner ? (
               <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 p-4 space-y-3">
                 <p className="text-sm text-gray-500">Sizning juftingiz</p>
@@ -537,7 +765,11 @@ export default function StudentVocabularyPage() {
         {tab === 'flashcards' && (
           <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-4">
             {!currentFlashcard ? (
-              <p className="text-sm text-gray-500">Flashcards topilmadi.</p>
+              <div className="rounded-xl border border-dashed border-indigo-200 dark:border-indigo-800 p-4 text-sm">
+                <p className="font-medium text-gray-900 dark:text-white">Flashcards topilmadi</p>
+                <p className="text-gray-500 mt-1">Avval AI Proctorda quiz ishlang, keyin qayta tekshiring.</p>
+                <button onClick={() => setTab('proctor')} className="mt-3 rounded-lg bg-indigo-600 text-white px-3 py-1.5">AI Proctorga o‘tish</button>
+              </div>
             ) : (
               <>
                 <div className="flex items-center justify-between">

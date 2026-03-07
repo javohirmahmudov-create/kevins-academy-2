@@ -165,3 +165,21 @@ model Score {
   @@index([scoreType])
   @@index([studentId, scoreType, createdAt])
 }
+
+model VocabularyDuel {
+  id          Int      @id @default(autoincrement())
+  adminId     Int?
+  challengerId Int
+  opponentId  Int
+  status      String   @default("pending")
+  initiatorMode String @default("manual")
+  acceptedAt  DateTime?
+  completedAt DateTime?
+  meta        Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([adminId, status, createdAt])
+  @@index([challengerId, status, createdAt])
+  @@index([opponentId, status, createdAt])
+}

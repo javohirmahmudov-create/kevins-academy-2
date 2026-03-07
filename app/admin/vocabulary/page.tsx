@@ -62,7 +62,7 @@ export default function AdminVocabularyPage() {
     if (!currentAdmin?.id) return
     setLoadingPending(true)
     try {
-      const response = await fetch('/api/admin/vocabulary/peer-pending?status=pending', {
+      const response = await fetch('/api/admin/vocabulary/peer-pending?status=suspicious', {
         headers: { 'x-admin-id': String(currentAdmin.id) },
       })
       const payload = await response.json()
@@ -194,7 +194,7 @@ export default function AdminVocabularyPage() {
         </section>
 
         <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Peer-check tasdiqlash</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Peer-check: shubhali holatlar</h2>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -205,16 +205,19 @@ export default function AdminVocabularyPage() {
                   <th className="py-2">Partner</th>
                   <th className="py-2">Ball</th>
                   <th className="py-2">Recording</th>
+                  <th className="py-2">Status</th>
                   <th className="py-2">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingPending ? (
-                  <tr><td className="py-3 text-gray-500" colSpan={6}>Yuklanmoqda...</td></tr>
+                  <tr><td className="py-3 text-gray-500" colSpan={7}>Yuklanmoqda...</td></tr>
                 ) : pendingRows.length === 0 ? (
-                  <tr><td className="py-3 text-gray-500" colSpan={6}>Tasdiq kutayotgan natija yo‘q</td></tr>
+                  <tr><td className="py-3 text-gray-500" colSpan={7}>Shubhali holat yo‘q. Auto-approve ishladi ✅</td></tr>
                 ) : pendingRows.map((row) => {
                   const peer = row?.breakdown?.peerChecking || {}
+                  const status = String(peer?.status || 'pending_confirmation')
+                  const difference = Number(peer?.autoValidation?.difference || 0)
                   return (
                     <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
                       <td className="py-2 text-xs text-gray-500">{row.createdAt ? new Date(row.createdAt).toLocaleString('uz-UZ') : '-'}</td>
@@ -227,6 +230,10 @@ export default function AdminVocabularyPage() {
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
+                      </td>
+                      <td className="py-2 text-xs">
+                        <span className="inline-flex rounded-full bg-amber-100 text-amber-700 px-2 py-1">{status}</span>
+                        {difference > 0 ? <p className="text-gray-500 mt-1">Farq: {difference}</p> : null}
                       </td>
                       <td className="py-2">
                         <div className="flex items-center gap-2">

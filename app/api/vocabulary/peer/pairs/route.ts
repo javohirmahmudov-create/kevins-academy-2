@@ -33,8 +33,12 @@ export async function GET(request: Request) {
       orderBy: { fullName: 'asc' },
     })
 
-    if (students.length < 2) {
-      return NextResponse.json({ pairs: [], myPartner: null, message: 'Juftlik uchun kamida 2 o‘quvchi kerak' })
+    const candidates = Number.isFinite(studentId) && studentId > 0
+      ? students.filter((item) => Number(item.id) !== studentId)
+      : students
+
+    if (students.length < 2 || candidates.length < 1) {
+      return NextResponse.json({ pairs: [], myPartner: null, students: candidates, message: 'Juftlik uchun kamida 2 o‘quvchi kerak' })
     }
 
     const randomized = shuffle(students)
@@ -55,7 +59,11 @@ export async function GET(request: Request) {
       ? (myPartner.left.id === studentId ? myPartner.right : myPartner.left)
       : null
 
-    return NextResponse.json({ pairs, myPartner: partner })
+    const randomPartner = Number.isFinite(studentId) && studentId > 0
+      ? shuffle(candidates)[0] || null
+      : null
+
+    return NextResponse.json({ pairs, myPartner: partner || randomPartner, students: candidates })
   } catch (error: any) {
     return NextResponse.json({ error: String(error?.message || 'Xatolik') }, { status: 500 })
   }

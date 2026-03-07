@@ -2,7 +2,8 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
-import { findTelegramChatIdByPhone, sendTelegramMessage } from '@/lib/telegram'
+import { buildTelegramStartLink, findTelegramChatIdByPhone } from '@/lib/telegram'
+import { buildSessionDayKey, isSessionStartedToday, sendHybridVocabularyNotification } from '@/lib/vocabulary'
 
 function pickRandom<T>(items: T[]): T | null {
   if (!items.length) return null
@@ -20,22 +21,27 @@ function getAppBase(request: Request) {
   }
 }
 
-async function logNotification(input: {
-  adminId?: number | null
-  studentId?: number | null
-  channel: string
-  type: string
-  status: string
-  recipient?: string | null
-  message: string
-  error?: string | null
-}) {
-  try {
-    const notificationLogDelegate = (prisma as any).notificationLog
-    if (!notificationLogDelegate?.create) return
-    await notificationLogDelegate.create({ data: input })
-  } catch {
-    // no-op
+async function getSessionState(adminId?: number | null) {
+  if (!adminId) {
+    return {
+      sessionStartedToday: false,
+      duelEnabled: false,
+      readyForClass: false,
+    }
+  }
+
+  const row = await prisma.vocabularySessionControl.findUnique({
+    where: { adminId: Number(adminId) },
+    select: { sessionDayKey: true, sessionActive: true, duelEnabled: true },
+  })
+
+  const sessionStartedToday = Boolean(row?.sessionActive) && isSessionStartedToday(row?.sessionDayKey || null)
+  const duelEnabled = sessionStartedToday ? Boolean(row?.duelEnabled) : false
+
+  return {
+    sessionStartedToday,
+    duelEnabled,
+    readyForClass: sessionStartedToday && duelEnabled,
   }
 }
 
@@ -51,7 +57,7 @@ export async function GET(request: Request) {
 
     const student = await prisma.student.findUnique({
       where: { id: studentId },
-      select: { id: true, fullName: true, adminId: true },
+      select: { id: true, fullName: true, adminId: true, phone: true },
     })
 
     if (!student) {
@@ -102,11 +108,20 @@ export async function GET(request: Request) {
       }
     })
 
+    const session = await getSessionState(adminId)
+    const botChatId = await findTelegramChatIdByPhone(student.phone)
+    const botLink = buildTelegramStartLink(student.phone)
+
     return NextResponse.json({
       duels: mapped,
       pendingIncoming: mapped.filter((item) => item.status === 'pending' && item.incoming),
       pendingOutgoing: mapped.filter((item) => item.status === 'pending' && !item.incoming),
       activeDuel: mapped.find((item) => item.status === 'active') || null,
+      session,
+      bot: {
+        linked: Boolean(botChatId),
+        startLink: botLink || null,
+      },
     })
   } catch (error: any) {
     return NextResponse.json({ error: String(error?.message || 'Xatolik') }, { status: 500 })
@@ -128,7 +143,7 @@ export async function POST(request: Request) {
 
     const challenger = await prisma.student.findUnique({
       where: { id: challengerId },
-      select: { id: true, fullName: true, group: true, adminId: true },
+      select: { id: true, fullName: true, group: true, adminId: true, phone: true },
     })
 
     if (!challenger) {
@@ -141,6 +156,20 @@ export async function POST(request: Request) {
 
     if (!challenger.group) {
       return NextResponse.json({ error: 'Student group required' }, { status: 400 })
+    }
+
+    const session = await getSessionState(challenger.adminId || scopedAdminId)
+    if (!session.readyForClass) {
+      return NextResponse.json({ error: 'Duel rejimi hozir o‘chiq. Admin bugungi sessionni boshlasin va Duel mode ni yoqsin.' }, { status: 400 })
+    }
+
+    const challengerChatId = await findTelegramChatIdByPhone(challenger.phone)
+    if (!challengerChatId) {
+      const connectLink = buildTelegramStartLink(challenger.phone)
+      return NextResponse.json({
+        error: 'Iltimos, avval Kevin Botni ulang. Ulanmasangiz duel chaqiruvlarini ololmaysiz.',
+        connectBotUrl: connectLink || null,
+      }, { status: 400 })
     }
 
     if (!opponentId || mode === 'random') {
@@ -218,70 +247,39 @@ export async function POST(request: Request) {
     const duelUrl = `${base}/student/vocabulary?tab=peer&duel=${duel.id}`
     const duelText = `🔥 Vocabulary duel chaqiruvi!\n${challenger.fullName} sizni duelga taklif qildi.`
 
-    let sentChannel = 'inapp'
-    let sendError = ''
+    const directChatId = await findTelegramChatIdByPhone(opponent.phone)
+    const group = await prisma.group.findFirst({
+      where: {
+        name: challenger.group,
+        ...(challenger.adminId ? { adminId: challenger.adminId } : {}),
+      },
+      select: { telegramChatId: true },
+    })
 
-    try {
-      const chatId = await findTelegramChatIdByPhone(opponent.phone)
-      if (chatId) {
-        const telegramResult = await sendTelegramMessage({
-          chatId,
-          text: duelText,
-          buttonUrl: duelUrl,
-          buttonText: 'Duelni ochish',
-        })
-        if (telegramResult.ok) {
-          sentChannel = 'telegram_direct'
-        } else {
-          sendError = telegramResult.reason
-        }
-      }
-
-      if (sentChannel === 'inapp') {
-        const group = await prisma.group.findFirst({
-          where: {
-            name: challenger.group,
-            ...(challenger.adminId ? { adminId: challenger.adminId } : {}),
-          },
-          select: { telegramChatId: true },
-        })
-
-        if (group?.telegramChatId) {
-          const telegramResult = await sendTelegramMessage({
-            chatId: String(group.telegramChatId),
-            text: `🔥 ${opponent.fullName}, sizga vocabulary duel bor!\nTaklif: ${challenger.fullName}`,
-            buttonUrl: duelUrl,
-            buttonText: 'Duelga kirish',
-          })
-          if (telegramResult.ok) {
-            sentChannel = 'telegram_group'
-          } else {
-            sendError = telegramResult.reason
-          }
-        }
-      }
-    } catch (error: any) {
-      sendError = String(error?.message || 'telegram_send_failed')
-    }
-
-    await logNotification({
+    const notifyResult = await sendHybridVocabularyNotification({
       adminId: challenger.adminId || null,
       studentId: opponent.id,
-      channel: sentChannel,
       type: 'vocabulary_duel_invite',
-      status: sendError ? 'failed' : 'sent',
-      recipient: String(opponent.id),
-      message: `Duel invite from ${challenger.fullName} to ${opponent.fullName}`,
-      error: sendError || null,
+      inAppMessage: `Duel invite from ${challenger.fullName} to ${opponent.fullName}`,
+      telegramText: directChatId
+        ? duelText
+        : `🔥 ${opponent.fullName}, sizga vocabulary duel bor!\nTaklif: ${challenger.fullName}`,
+      buttonUrl: duelUrl,
+      buttonText: directChatId ? 'Duelni ochish' : 'Duelga kirish',
+      directChatId: directChatId || undefined,
+      groupChatId: directChatId ? undefined : String(group?.telegramChatId || ''),
     })
 
     return NextResponse.json({
       ok: true,
       duel,
       notified: {
-        channel: sentChannel,
-        hasError: Boolean(sendError),
+        channel: notifyResult.telegramChannel !== 'none' ? notifyResult.telegramChannel : 'inapp',
+        hasError: Boolean(notifyResult.telegramChannel !== 'none' && !notifyResult.telegramSent),
+        inAppSent: notifyResult.inAppSent,
       },
+      readyForClass: true,
+      todayKey: buildSessionDayKey(),
     })
   } catch (error: any) {
     return NextResponse.json({ error: String(error?.message || 'Xatolik') }, { status: 500 })

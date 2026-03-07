@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Bell, Brain, Mic, RefreshCw, Search, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Bell, Brain, Link as LinkIcon, Mic, RefreshCw, Search, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
 import { useApp } from '@/lib/app-context'
 
 type QuizItem = {
@@ -74,6 +74,9 @@ export default function StudentVocabularyPage() {
   const [pendingIncomingDuels, setPendingIncomingDuels] = useState<DuelItem[]>([])
   const [pendingOutgoingDuels, setPendingOutgoingDuels] = useState<DuelItem[]>([])
   const [activeDuel, setActiveDuel] = useState<DuelItem | null>(null)
+  const [duelReadyForClass, setDuelReadyForClass] = useState(false)
+  const [botLinked, setBotLinked] = useState(true)
+  const [botStartLink, setBotStartLink] = useState('')
 
   const [recordingFile, setRecordingFile] = useState<File | null>(null)
   const [uploadingRecording, setUploadingRecording] = useState(false)
@@ -164,10 +167,16 @@ export default function StudentVocabularyPage() {
       setPendingIncomingDuels(Array.isArray(payload?.pendingIncoming) ? payload.pendingIncoming : [])
       setPendingOutgoingDuels(Array.isArray(payload?.pendingOutgoing) ? payload.pendingOutgoing : [])
       setActiveDuel(payload?.activeDuel || null)
+      setDuelReadyForClass(Boolean(payload?.session?.readyForClass))
+      setBotLinked(Boolean(payload?.bot?.linked))
+      setBotStartLink(String(payload?.bot?.startLink || ''))
     } catch {
       setPendingIncomingDuels([])
       setPendingOutgoingDuels([])
       setActiveDuel(null)
+      setDuelReadyForClass(false)
+      setBotLinked(true)
+      setBotStartLink('')
     } finally {
       setDuelLoading(false)
     }
@@ -175,6 +184,14 @@ export default function StudentVocabularyPage() {
 
   const createDuelInvite = useCallback(async (mode: 'manual' | 'random') => {
     if (!student?.id) return
+    if (!duelReadyForClass) {
+      alert('Admin bugungi sessionni boshlamaguncha duel ishlamaydi')
+      return
+    }
+    if (!botLinked) {
+      alert('Avval Kevin Botni ulang, keyin duelga kirishingiz mumkin')
+      return
+    }
     if (mode === 'manual' && !pairPartner?.id) {
       alert('Avval partner tanlang')
       return
@@ -200,7 +217,7 @@ export default function StudentVocabularyPage() {
     } finally {
       setDuelActionLoading(false)
     }
-  }, [loadDuels, pairPartner?.id, student?.id])
+  }, [botLinked, duelReadyForClass, loadDuels, pairPartner?.id, student?.id])
 
   const respondToDuel = useCallback(async (duelId: number, action: 'accept' | 'reject') => {
     if (!student?.id || !duelId) return
@@ -654,6 +671,30 @@ export default function StudentVocabularyPage() {
               </div>
             ) : null}
 
+            {!botLinked ? (
+              <div className="rounded-xl border border-red-300 bg-red-50 dark:bg-red-950/20 p-4 text-sm text-red-700 dark:text-red-300 space-y-2">
+                <p className="font-semibold">Iltimos, avval Kevin Botni ulang. Aks holda duel chaqiruvlarini ololmaysiz.</p>
+                {botStartLink ? (
+                  <a
+                    href={botStartLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white px-3 py-1.5"
+                  >
+                    <LinkIcon className="w-4 h-4" /> Kevin Botni ulash
+                  </a>
+                ) : (
+                  <p className="text-xs">Bot username sozlamasi topilmadi. Admin bilan bog‘laning.</p>
+                )}
+              </div>
+            ) : null}
+
+            {!duelReadyForClass ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
+                Duel rejimi hozir o‘chiq. Admin paneldan bugungi sessionni boshlab, &quot;Duel rejimini yoqish&quot; ni yoqishi kerak.
+              </div>
+            ) : null}
+
             {activeDuel ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-700 dark:text-amber-300">
                 Aktiv duel: {activeDuel.challengerName} vs {activeDuel.opponentName}. Proctor tabiga o‘ting va quizni boshlang.
@@ -689,8 +730,8 @@ export default function StudentVocabularyPage() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button disabled={duelActionLoading || !pairPartner?.id} onClick={() => createDuelInvite('manual')} className="rounded-lg bg-red-600 text-white px-3 py-1.5 text-sm disabled:opacity-50">Duelga chaqirish</button>
-                <button disabled={duelActionLoading} onClick={() => createDuelInvite('random')} className="rounded-lg border border-amber-300 text-amber-700 dark:text-amber-300 px-3 py-1.5 text-sm disabled:opacity-50">Random duel</button>
+                <button disabled={duelActionLoading || !pairPartner?.id || !duelReadyForClass || !botLinked} onClick={() => createDuelInvite('manual')} className="rounded-lg bg-red-600 text-white px-3 py-1.5 text-sm disabled:opacity-50">Duelga chaqirish</button>
+                <button disabled={duelActionLoading || !duelReadyForClass || !botLinked} onClick={() => createDuelInvite('random')} className="rounded-lg border border-amber-300 text-amber-700 dark:text-amber-300 px-3 py-1.5 text-sm disabled:opacity-50">Random duel</button>
                 {duelLoading ? <span className="text-xs text-gray-500">Duel holati yangilanmoqda...</span> : null}
               </div>
               {pendingOutgoingDuels.length > 0 ? <p className="text-xs text-gray-500">Kutilyapti: {pendingOutgoingDuels.length} ta yuborilgan chaqiruv.</p> : null}

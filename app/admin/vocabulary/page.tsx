@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Brain, Check, RefreshCw, Users, X } from 'lucide-react'
+import { ArrowLeft, Brain, Check, Power, RefreshCw, Users, X } from 'lucide-react'
 import { getGroups } from '@/lib/storage'
 import { useApp } from '@/lib/app-context'
 
@@ -32,6 +32,14 @@ export default function AdminVocabularyPage() {
 
   const [loadingPending, setLoadingPending] = useState(false)
   const [pendingRows, setPendingRows] = useState<any[]>([])
+  const [sessionLoading, setSessionLoading] = useState(false)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [sessionState, setSessionState] = useState({
+    sessionStartedToday: false,
+    duelEnabled: false,
+    readyForClass: false,
+    startedAt: null as string | null,
+  })
 
   const loadGroups = useCallback(async () => {
     const data = await getGroups()
@@ -75,6 +83,55 @@ export default function AdminVocabularyPage() {
     }
   }, [currentAdmin?.id])
 
+  const loadSessionState = useCallback(async () => {
+    if (!currentAdmin?.id) return
+    setSessionLoading(true)
+    try {
+      const response = await fetch('/api/admin/vocabulary/session', {
+        headers: { 'x-admin-id': String(currentAdmin.id) },
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Session load error'))
+      setSessionState({
+        sessionStartedToday: Boolean(payload?.sessionStartedToday),
+        duelEnabled: Boolean(payload?.duelEnabled),
+        readyForClass: Boolean(payload?.readyForClass),
+        startedAt: payload?.startedAt || null,
+      })
+    } catch {
+      setSessionState({
+        sessionStartedToday: false,
+        duelEnabled: false,
+        readyForClass: false,
+        startedAt: null,
+      })
+    } finally {
+      setSessionLoading(false)
+    }
+  }, [currentAdmin?.id])
+
+  const updateSession = async (action: 'start' | 'stop' | 'duel-mode', duelEnabled?: boolean) => {
+    if (!currentAdmin?.id) return
+    setSessionBusy(true)
+    try {
+      const response = await fetch('/api/admin/vocabulary/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': String(currentAdmin.id),
+        },
+        body: JSON.stringify({ action, duelEnabled }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Session update error'))
+      await loadSessionState()
+    } catch (error: any) {
+      alert(String(error?.message || 'Session update error'))
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
   useEffect(() => {
     if (!currentAdmin) {
       router.replace('/')
@@ -90,6 +147,10 @@ export default function AdminVocabularyPage() {
   useEffect(() => {
     loadPending()
   }, [loadPending])
+
+  useEffect(() => {
+    loadSessionState()
+  }, [loadSessionState])
 
   const approve = async (scoreId: number, approved: boolean) => {
     if (!currentAdmin?.id) return
@@ -133,6 +194,47 @@ export default function AdminVocabularyPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-gray-900 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-gray-500">Bugungi session holati</p>
+              <p className={`text-xl font-semibold ${sessionState.readyForClass ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {sessionState.readyForClass ? 'Darsga tayyor ✅' : 'Session boshlanmagan'}
+              </p>
+              {sessionState.startedAt ? <p className="text-xs text-gray-500 mt-1">Boshlangan: {new Date(sessionState.startedAt).toLocaleString('uz-UZ')}</p> : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                disabled={sessionBusy}
+                onClick={() => updateSession('start')}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm disabled:opacity-50"
+              >
+                <Power className="w-4 h-4" /> Boshlash
+              </button>
+              <button
+                disabled={sessionBusy}
+                onClick={() => updateSession('stop')}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                Sessionni to‘xtatish
+              </button>
+
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={sessionState.duelEnabled}
+                  disabled={!sessionState.sessionStartedToday || sessionBusy}
+                  onChange={(event) => updateSession('duel-mode', event.target.checked)}
+                />
+                Bugungi dars uchun Duel rejimini yoqish
+              </label>
+            </div>
+          </div>
+          {sessionLoading ? <p className="text-xs text-gray-500 mt-2">Session holati yuklanmoqda...</p> : null}
+        </section>
+
         <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>

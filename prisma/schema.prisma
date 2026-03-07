@@ -183,3 +183,16 @@ model VocabularyDuel {
   @@index([challengerId, status, createdAt])
   @@index([opponentId, status, createdAt])
 }
+
+model VocabularySessionControl {
+  id             Int      @id @default(autoincrement())
+  adminId        Int      @unique
+  sessionDayKey  String?
+  sessionActive  Boolean  @default(false)
+  duelEnabled    Boolean  @default(false)
+  startedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([adminId, sessionDayKey])
+}

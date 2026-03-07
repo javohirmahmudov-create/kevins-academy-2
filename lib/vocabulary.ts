@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from 'crypto'
+import prisma from '@/lib/prisma'
+import { sendTelegramMessage } from '@/lib/telegram'
 
 export type WordPair = {
   wordId: string
@@ -223,4 +225,97 @@ export function createQuizFromStates(states: WordState[], size: number) {
     wordId: item.wordId,
     promptUz: item.promptUz,
   }))
+}
+
+export function buildSessionDayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10)
+}
+
+export function isSessionStartedToday(sessionDayKey?: string | null, now = new Date()) {
+  return Boolean(sessionDayKey && String(sessionDayKey) === buildSessionDayKey(now))
+}
+
+type HybridNotifyInput = {
+  adminId?: number | null
+  studentId?: number | null
+  type: string
+  inAppMessage: string
+  telegramText: string
+  buttonUrl?: string
+  buttonText?: string
+  directChatId?: string
+  groupChatId?: string
+}
+
+export async function sendHybridVocabularyNotification(input: HybridNotifyInput) {
+  const notificationLogDelegate = (prisma as any).notificationLog
+
+  const createLog = async (data: {
+    channel: string
+    status: string
+    message: string
+    error?: string | null
+  }) => {
+    if (!notificationLogDelegate?.create) return
+    await notificationLogDelegate.create({
+      data: {
+        adminId: input.adminId || null,
+        studentId: input.studentId || null,
+        recipient: input.studentId ? String(input.studentId) : null,
+        type: input.type,
+        channel: data.channel,
+        status: data.status,
+        message: data.message,
+        error: data.error || null,
+      },
+    })
+  }
+
+  await createLog({
+    channel: 'inapp',
+    status: 'sent',
+    message: input.inAppMessage,
+  })
+
+  let telegramChannel = 'none'
+  let telegramSent = false
+  let telegramError = ''
+
+  if (input.directChatId) {
+    telegramChannel = 'telegram_direct'
+    const response = await sendTelegramMessage({
+      chatId: input.directChatId,
+      text: input.telegramText,
+      buttonUrl: input.buttonUrl,
+      buttonText: input.buttonText,
+    })
+    telegramSent = response.ok
+    if (!response.ok) telegramError = response.reason
+  } else if (input.groupChatId) {
+    telegramChannel = 'telegram_group'
+    const response = await sendTelegramMessage({
+      chatId: input.groupChatId,
+      text: input.telegramText,
+      buttonUrl: input.buttonUrl,
+      buttonText: input.buttonText,
+    })
+    telegramSent = response.ok
+    if (!response.ok) telegramError = response.reason
+  }
+
+  if (telegramChannel !== 'none') {
+    await createLog({
+      channel: telegramChannel,
+      status: telegramSent ? 'sent' : 'failed',
+      message: input.inAppMessage,
+      error: telegramError || null,
+    })
+  }
+
+  return {
+    inAppSent: true,
+    telegramChannel,
+    telegramSent,
+    telegramError: telegramError || null,
+  }
 }

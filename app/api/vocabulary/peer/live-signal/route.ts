@@ -49,13 +49,19 @@ export async function GET(request: Request) {
       },
     })
 
+    const latestRoom = await prisma.vocabularyLiveSignal.findFirst({
+      where: { roomKey },
+      orderBy: { id: 'desc' },
+      select: { id: true },
+    })
+
     const signals = rows.map((row) => ({
       id: Number(row.id),
       type: String(row.type || ''),
       payload: row.payload,
     }))
 
-    const latestSignalId = signals.length ? Number(signals[signals.length - 1]?.id || lowerBoundId) : lowerBoundId
+    const latestSignalId = Math.max(lowerBoundId, Number(latestRoom?.id || 0))
 
     return NextResponse.json({ ok: true, latestSignalId, signals })
   } catch (error: any) {

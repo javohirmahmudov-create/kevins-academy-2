@@ -32,13 +32,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Forbidden room member' }, { status: 403 })
     }
 
-    const latestReset = await prisma.vocabularyLiveSignal.findFirst({
-      where: { roomKey, type: 'reset' },
-      orderBy: { id: 'desc' },
-      select: { id: true },
-    })
-
-    const lowerBoundId = Math.max(0, sinceId, Number(latestReset?.id || 0))
+    const lowerBoundId = Math.max(0, sinceId)
 
     const rows = await prisma.vocabularyLiveSignal.findMany({
       where: {

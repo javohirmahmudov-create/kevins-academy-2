@@ -725,6 +725,8 @@ export default function StudentVocabularyPage() {
     const polite = selfId > partnerId
     let makingOffer = false
     let ignoreOffer = false
+    let lastOfferSentAt = 0
+    const pendingIceCandidates: RTCIceCandidateInit[] = []
     setDuelConnectionStatus('connecting')
 
     const connection = new RTCPeerConnection({
@@ -788,6 +790,7 @@ export default function StudentVocabularyPage() {
         if (connection.signalingState !== 'stable') return
         await connection.setLocalDescription(offer)
         sentOfferRef.current = true
+        lastOfferSentAt = Date.now()
         await sendLiveSignal(roomKey, 'offer', offer)
       } catch {
         // negotiation retry happens on next poll or reconnect
@@ -826,6 +829,15 @@ export default function StudentVocabularyPage() {
             }
 
             await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+            while (pendingIceCandidates.length) {
+              const queued = pendingIceCandidates.shift()
+              if (!queued) break
+              try {
+                await connection.addIceCandidate(new RTCIceCandidate(queued))
+              } catch {
+                // ignore invalid queued candidates
+              }
+            }
             const answer = await connection.createAnswer()
             await connection.setLocalDescription(answer)
             await sendLiveSignal(roomKey, 'answer', answer)
@@ -833,17 +845,33 @@ export default function StudentVocabularyPage() {
           } else if (type === 'answer' && signalPayload) {
             if (connection.signalingState === 'have-local-offer') {
               await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+              while (pendingIceCandidates.length) {
+                const queued = pendingIceCandidates.shift()
+                if (!queued) break
+                try {
+                  await connection.addIceCandidate(new RTCIceCandidate(queued))
+                } catch {
+                  // ignore invalid queued candidates
+                }
+              }
             }
             setDuelConnectionStatus('connecting')
           } else if (type === 'candidate' && signalPayload) {
-            try {
-              await connection.addIceCandidate(new RTCIceCandidate(signalPayload))
-            } catch {
-              // ignore invalid candidate chunks
+            if (!connection.remoteDescription) {
+              pendingIceCandidates.push(signalPayload)
+            } else {
+              try {
+                await connection.addIceCandidate(new RTCIceCandidate(signalPayload))
+              } catch {
+                // ignore invalid candidate chunks
+              }
             }
           } else if (type === 'hangup') {
             setRemoteStreamReady(false)
             setDuelConnectionStatus('waiting')
+          } else if (type === 'reset') {
+            signalCursorIdRef.current = Math.max(signalCursorIdRef.current, signalId)
+            sentOfferRef.current = false
           }
         }
         const latestSignalId = Number(payload?.latestSignalId || 0)
@@ -858,9 +886,13 @@ export default function StudentVocabularyPage() {
     }
 
     const startNegotiation = async () => {
-      if (selfId < partnerId) {
-        const resetId = await sendLiveSignal(roomKey, 'reset', { by: selfId })
-        signalCursorIdRef.current = Math.max(signalCursorIdRef.current, Number(resetId || 0))
+      try {
+        const bootstrap = await fetch(`/api/vocabulary/peer/live-signal?roomKey=${encodeURIComponent(roomKey)}&studentId=${encodeURIComponent(String(student.id))}&sinceId=0`)
+        const bootstrapPayload = await bootstrap.json()
+        const latestId = Number(bootstrapPayload?.latestSignalId || 0)
+        signalCursorIdRef.current = Math.max(0, latestId)
+      } catch {
+        // ignore bootstrap errors; polling will recover
       }
       await ensureOffer()
       await processSignals()
@@ -872,6 +904,13 @@ export default function StudentVocabularyPage() {
       signalPollingRef.current = null
     }
     signalPollingRef.current = setInterval(() => {
+      if (connection.signalingState === 'have-local-offer' && !connection.currentRemoteDescription && sentOfferRef.current) {
+        const now = Date.now()
+        if (now - lastOfferSentAt >= 2500 && connection.localDescription) {
+          lastOfferSentAt = now
+          void sendLiveSignal(roomKey, 'offer', connection.localDescription)
+        }
+      }
       void processSignals()
     }, 350)
     const remoteVideoElement = remoteVideoRef.current

@@ -9,7 +9,8 @@
     "migrate:deploy": "npm run migrate:resolve && prisma migrate deploy",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
-    "seed": "ts-node --project tsconfig.node.json scripts/seed.ts"
+    "seed": "ts-node --project tsconfig.node.json scripts/seed.ts",
+    "smoke:peer": "node scripts/e2e-vocabulary-peer-smoke.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",

@@ -90,6 +90,7 @@ export default function StudentVocabularyPage() {
   const [recordingWarningSoundEnabled, setRecordingWarningSoundEnabled] = useState(true)
   const [remoteStreamReady, setRemoteStreamReady] = useState(false)
   const [duelConnectionStatus, setDuelConnectionStatus] = useState<'idle' | 'waiting' | 'connecting' | 'connected' | 'disconnected' | 'error'>('idle')
+  const [peerReconnectNonce, setPeerReconnectNonce] = useState(0)
 
   const questionStartedAtRef = useRef(0)
   const questionTimeoutRef = useRef<any>(null)
@@ -729,8 +730,28 @@ export default function StudentVocabularyPage() {
     const pendingIceCandidates: RTCIceCandidateInit[] = []
     setDuelConnectionStatus('connecting')
 
+    const turnUrlsRaw = String(process.env.NEXT_PUBLIC_TURN_URLS || process.env.NEXT_PUBLIC_TURN_URL || '').trim()
+    const turnUsername = String(process.env.NEXT_PUBLIC_TURN_USERNAME || '').trim()
+    const turnCredential = String(process.env.NEXT_PUBLIC_TURN_CREDENTIAL || '').trim()
+    const turnUrls = turnUrlsRaw
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const iceServers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ]
+    if (turnUrls.length && turnUsername && turnCredential) {
+      iceServers.push({
+        urls: turnUrls,
+        username: turnUsername,
+        credential: turnCredential,
+      })
+    }
+
     const connection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers,
     })
     peerConnectionRef.current = connection
 
@@ -935,7 +956,7 @@ export default function StudentVocabularyPage() {
       setRemoteStreamReady(false)
       setDuelConnectionStatus('waiting')
     }
-  }, [cameraActive, pairPartner?.id, sendLiveSignal, student?.id])
+  }, [cameraActive, pairPartner?.id, peerReconnectNonce, sendLiveSignal, student?.id])
 
   const startPeerRecording = () => {
     if (!mediaStreamRef.current || recordingActive) return
@@ -1108,6 +1129,23 @@ export default function StudentVocabularyPage() {
     }
   }
 
+  const handleHardRefresh = useCallback(async () => {
+    await Promise.all([loadSession(), loadPairing(), loadDuels()])
+    if (tab !== 'peer') return
+
+    if (cameraActive) {
+      stopCamera()
+      setTimeout(() => {
+        void turnOnCamera()
+        setPeerReconnectNonce((prev) => prev + 1)
+      }, 160)
+      return
+    }
+
+    void turnOnCamera()
+    setPeerReconnectNonce((prev) => prev + 1)
+  }, [cameraActive, loadDuels, loadPairing, loadSession, stopCamera, tab, turnOnCamera])
+
   if (!student) return null
 
   return (
@@ -1124,7 +1162,7 @@ export default function StudentVocabularyPage() {
             <Brain className="w-5 h-5 text-indigo-500" /> AI Vocabulary Proctor
           </h1>
           <button
-            onClick={loadSession}
+            onClick={handleHardRefresh}
             className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-sm"
           >
             <RefreshCw className="w-4 h-4" /> Yangilash

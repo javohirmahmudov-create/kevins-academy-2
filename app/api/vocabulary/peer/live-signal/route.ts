@@ -90,17 +90,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden room member' }, { status: 403 })
     }
 
-    const created = await prisma.vocabularyLiveSignal.create({
-      data: {
-        roomKey,
-        fromStudentId: studentId,
-        type,
-        payload: payload || {},
-      },
-      select: {
-        id: true,
-        createdAt: true,
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      if (type === 'reset') {
+        await tx.vocabularyLiveSignal.deleteMany({ where: { roomKey } })
+      }
+
+      return tx.vocabularyLiveSignal.create({
+        data: {
+          roomKey,
+          fromStudentId: studentId,
+          type,
+          payload: payload || {},
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      })
     })
 
     return NextResponse.json({ ok: true, id: Number(created.id), at: created.createdAt })

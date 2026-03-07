@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
 
-function getTelegramToken() {
+function getTelegramTokens() {
   const candidates = [
     process.env.TELEGRAM_BOT_TOKEN,
     process.env.telegramtoken,
@@ -12,7 +12,7 @@ function getTelegramToken() {
     .map((item) => String(item || '').trim().replace(/^['"]+|['"]+$/g, ''))
     .filter(Boolean)
 
-  return candidates[0] || ''
+  return Array.from(new Set(candidates))
 }
 
 function normalizeTelegramChatId(value?: string | null) {
@@ -37,14 +37,14 @@ function isValidTelegramGroupId(value?: string | null) {
 }
 
 async function verifyTelegramGroupConnection(chatId: string) {
-  const token = getTelegramToken()
+  const tokens = getTelegramTokens()
   const normalizedChatId = normalizeTelegramChatId(chatId)
 
-  if (!token) {
+  if (!tokens.length) {
     return {
       ok: false as const,
       isAdmin: false,
-      message: 'TELEGRAM_BOT_TOKEN topilmadi',
+      message: 'Telegram bot token topilmadi (TELEGRAM_BOT_TOKEN/TELEGRAM_TOKEN)',
     }
   }
 
@@ -56,79 +56,58 @@ async function verifyTelegramGroupConnection(chatId: string) {
     }
   }
 
-  try {
-    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`)
-    const meJson = await meRes.json().catch(() => null)
-    const botId = Number(meJson?.result?.id || 0)
-    const botUsername = String(meJson?.result?.username || '').trim()
-    const botLabel = botUsername ? `@${botUsername}` : 'joriy bot'
+  const diagnostics: string[] = []
 
-    if (!meRes.ok || !Number.isFinite(botId) || botId <= 0) {
-      return {
-        ok: false as const,
-        isAdmin: false,
-        message: 'Bot ma’lumotini olishda xatolik. TELEGRAM_BOT_TOKEN ni tekshiring.',
-      }
-    }
+  for (const token of tokens) {
+    try {
+      const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`)
+      const meJson = await meRes.json().catch(() => null)
+      const botId = Number(meJson?.result?.id || 0)
+      const botUsername = String(meJson?.result?.username || '').trim()
+      const botLabel = botUsername ? `@${botUsername}` : 'joriy bot'
 
-    const memberRes = await fetch(`https://api.telegram.org/bot${token}/getChatMember`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: normalizedChatId,
-        user_id: botId,
-      }),
-    })
-
-    const memberJson = await memberRes.json().catch(() => null)
-    if (!memberRes.ok || !memberJson?.ok) {
-      const description = String(memberJson?.description || '').trim()
-      const lower = description.toLowerCase()
-
-      if (lower.includes('chat not found')) {
-        return {
-          ok: false as const,
-          isAdmin: false,
-          message: `Telegram chat topilmadi. Tekshirilgan bot: ${botLabel}, chat: ${normalizedChatId}. Agar ID to‘g‘ri bo‘lsa, shu botni guruhga qo‘shib admin qiling yoki production tokenni shu botnikiga almashtiring.`,
-        }
+      if (!meRes.ok || !Number.isFinite(botId) || botId <= 0) {
+        diagnostics.push(`${botLabel}: getMe xatolik`)
+        continue
       }
 
-      if (lower.includes('bot is not a member') || lower.includes('user not found')) {
-        return {
-          ok: false as const,
-          isAdmin: false,
-          message: `Bot bu guruhda topilmadi (${botLabel}). Avval shu botni guruhga qo‘shing, so‘ng admin huquq bering.`,
-        }
+      const memberRes = await fetch(`https://api.telegram.org/bot${token}/getChatMember`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: normalizedChatId,
+          user_id: botId,
+        }),
+      })
+
+      const memberJson = await memberRes.json().catch(() => null)
+      if (!memberRes.ok || !memberJson?.ok) {
+        const description = String(memberJson?.description || '').trim()
+        diagnostics.push(`${botLabel}: ${description || 'guruhda topilmadi'}`)
+        continue
+      }
+
+      const status = String(memberJson?.result?.status || '').toLowerCase()
+      const isAdmin = status === 'administrator' || status === 'creator'
+      if (!isAdmin) {
+        diagnostics.push(`${botLabel}: admin emas (${status || 'unknown'})`)
+        continue
       }
 
       return {
-        ok: false as const,
-        isAdmin: false,
-        message: description || 'Bot guruhga ulanmagan yoki chat ID noto‘g‘ri',
+        ok: true as const,
+        isAdmin: true,
+        message: `Muvaffaqiyatli bog‘landi ✅ (${botLabel} → ${normalizedChatId})`,
       }
+    } catch (error: any) {
+      diagnostics.push(`xatolik: ${String(error?.message || 'unknown')}`)
     }
+  }
 
-    const status = String(memberJson?.result?.status || '').toLowerCase()
-    const isAdmin = status === 'administrator' || status === 'creator'
-    if (!isAdmin) {
-      return {
-        ok: false as const,
-        isAdmin: false,
-        message: 'Bot guruhda admin emas. Iltimos, botga admin huquq bering',
-      }
-    }
-
-    return {
-      ok: true as const,
-      isAdmin: true,
-      message: `Muvaffaqiyatli bog‘landi ✅ (${botLabel} → ${normalizedChatId})`,
-    }
-  } catch (error: any) {
-    return {
-      ok: false as const,
-      isAdmin: false,
-      message: String(error?.message || 'Telegram tekshiruv xatosi'),
-    }
+  return {
+    ok: false as const,
+    isAdmin: false,
+    message: `Telegram chat topilmadi yoki bot admin emas. Chat: ${normalizedChatId}. Tekshiruv: ${diagnostics.join(' | ')}`,
   }
 }
 

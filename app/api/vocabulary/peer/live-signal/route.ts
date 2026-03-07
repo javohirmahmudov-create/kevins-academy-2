@@ -32,11 +32,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Forbidden room member' }, { status: 403 })
     }
 
+    const latestReset = await prisma.vocabularyLiveSignal.findFirst({
+      where: { roomKey, type: 'reset' },
+      orderBy: { id: 'desc' },
+      select: { id: true },
+    })
+
+    const lowerBoundId = Math.max(0, sinceId, Number(latestReset?.id || 0))
+
     const rows = await prisma.vocabularyLiveSignal.findMany({
       where: {
         roomKey,
         fromStudentId: { not: studentId },
-        id: { gt: Math.max(0, sinceId) },
+        id: { gt: lowerBoundId },
       },
       orderBy: { id: 'asc' },
       take: 200,
@@ -53,7 +61,7 @@ export async function GET(request: Request) {
       payload: row.payload,
     }))
 
-    const latestSignalId = signals.length ? Number(signals[signals.length - 1]?.id || sinceId) : Math.max(0, sinceId)
+    const latestSignalId = signals.length ? Number(signals[signals.length - 1]?.id || lowerBoundId) : lowerBoundId
 
     return NextResponse.json({ ok: true, latestSignalId, signals })
   } catch (error: any) {
@@ -74,8 +82,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'roomKey and studentId required' }, { status: 400 })
     }
 
-    if (!['offer', 'answer', 'candidate', 'hangup'].includes(type)) {
-      return NextResponse.json({ error: 'type must be offer, answer, candidate, or hangup' }, { status: 400 })
+    if (!['offer', 'answer', 'candidate', 'hangup', 'reset'].includes(type)) {
+      return NextResponse.json({ error: 'type must be offer, answer, candidate, hangup, or reset' }, { status: 400 })
     }
 
     if (!isRoomMember(roomKey, studentId)) {

@@ -568,10 +568,10 @@ export default function StudentVocabularyPage() {
     setPairPartner(random || null)
   }
 
-  const sendLiveSignal = useCallback(async (roomKey: string, type: 'offer' | 'answer' | 'candidate' | 'hangup', payload: any) => {
+  const sendLiveSignal = useCallback(async (roomKey: string, type: 'offer' | 'answer' | 'candidate' | 'hangup' | 'reset', payload: any) => {
     if (!student?.id || !roomKey) return
     try {
-      await fetch('/api/vocabulary/peer/live-signal', {
+      const response = await fetch('/api/vocabulary/peer/live-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -581,8 +581,11 @@ export default function StudentVocabularyPage() {
           payload,
         }),
       })
+      const data = await response.json().catch(() => null)
+      return Number(data?.id || 0)
     } catch {
       // ignore signaling send errors, polling will retry
+      return 0
     }
   }, [student?.id])
 
@@ -663,7 +666,21 @@ export default function StudentVocabularyPage() {
           width: { ideal: 640 },
           height: { ideal: 360 },
         },
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+          sampleSize: { ideal: 16 },
+        },
+      })
+      stream.getAudioTracks().forEach((track) => {
+        try {
+          track.contentHint = 'speech'
+        } catch {
+          // ignore unsupported contentHint
+        }
       })
       mediaStreamRef.current = stream
       if (liveVideoRef.current) {
@@ -728,10 +745,16 @@ export default function StudentVocabularyPage() {
       const sourceStream = event.streams?.[0]
       if (sourceStream) {
         sourceStream.getTracks().forEach((track) => {
-          remoteStream.addTrack(track)
+          const exists = remoteStream.getTracks().some((existing) => existing.id === track.id)
+          if (!exists) {
+            remoteStream.addTrack(track)
+          }
         })
       } else if (event.track) {
-        remoteStream.addTrack(event.track)
+        const exists = remoteStream.getTracks().some((existing) => existing.id === event.track.id)
+        if (!exists) {
+          remoteStream.addTrack(event.track)
+        }
       }
       const hasLiveRemote = remoteStream.getVideoTracks().some((track) => track.readyState === 'live')
       setRemoteStreamReady(hasLiveRemote)
@@ -834,15 +857,23 @@ export default function StudentVocabularyPage() {
       }
     }
 
-    void ensureOffer()
-    void processSignals()
+    const startNegotiation = async () => {
+      if (selfId < partnerId) {
+        const resetId = await sendLiveSignal(roomKey, 'reset', { by: selfId })
+        signalCursorIdRef.current = Math.max(signalCursorIdRef.current, Number(resetId || 0))
+      }
+      await ensureOffer()
+      await processSignals()
+    }
+
+    void startNegotiation()
     if (signalPollingRef.current) {
       clearInterval(signalPollingRef.current)
       signalPollingRef.current = null
     }
     signalPollingRef.current = setInterval(() => {
       void processSignals()
-    }, 1200)
+    }, 350)
     const remoteVideoElement = remoteVideoRef.current
 
     return () => {

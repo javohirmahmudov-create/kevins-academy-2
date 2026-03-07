@@ -196,3 +196,22 @@ model VocabularySessionControl {
 
   @@index([adminId, sessionDayKey])
 }
+
+model WeeklyHero {
+  id            Int      @id @default(autoincrement())
+  weekKey       String
+  rank          Int
+  studentId     Int
+  adminId       Int?
+  studentName   String
+  duelWins      Int      @default(0)
+  proctorBest   Float    @default(0)
+  totalScore    Float    @default(0)
+  badgeStartAt  DateTime
+  badgeEndAt    DateTime
+  createdAt     DateTime @default(now())
+
+  @@unique([weekKey, rank])
+  @@index([studentId, badgeEndAt])
+  @@index([weekKey, createdAt])
+}

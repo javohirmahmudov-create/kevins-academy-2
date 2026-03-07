@@ -23,6 +23,13 @@ type BadgeResult = {
   earned: boolean;
 };
 
+type WeeklyHeroBadge = {
+  title: string;
+  weekKey: string;
+  rank: number;
+  badgeEndAt: string;
+};
+
 const skillLabels: Record<string, string> = {
   vocabulary: 'Vocabulary',
   grammar: 'Grammar',
@@ -107,6 +114,7 @@ export default function StudentDashboard() {
   const [certificates, setCertificates] = useState<Array<{ id: number; fileName: string; fileUrl: string; fileType?: string; uploadedAt?: string }>>([]);
   const [certLoading, setCertLoading] = useState(false);
   const [certError, setCertError] = useState('');
+  const [weeklyHeroBadge, setWeeklyHeroBadge] = useState<WeeklyHeroBadge | null>(null);
   const adminScope = student?.adminId ? String(student.adminId) : 'system';
 
   useEffect(() => {
@@ -178,6 +186,23 @@ export default function StudentDashboard() {
             mockRank: Number(mockRow?.rank || 0),
             totalInGroup,
           });
+        }
+
+        try {
+          const badgeRes = await fetch(`/api/vocabulary/weekly-hero/active?studentId=${encodeURIComponent(String(student.id))}`)
+          const badgeData = await badgeRes.json()
+          if (badgeRes.ok && badgeData?.hasBadge && badgeData?.badge) {
+            setWeeklyHeroBadge({
+              title: String(badgeData.badge.title || 'Hafta Qahramoni'),
+              weekKey: String(badgeData.badge.weekKey || ''),
+              rank: Number(badgeData.badge.rank || 0),
+              badgeEndAt: String(badgeData.badge.badgeEndAt || ''),
+            })
+          } else {
+            setWeeklyHeroBadge(null)
+          }
+        } catch {
+          setWeeklyHeroBadge(null)
         }
 
         if (studentScores.length > 0) {
@@ -445,6 +470,13 @@ export default function StudentDashboard() {
         >
           <h2 className="text-3xl font-bold mb-2">{t('welcome_back')}, {student.fullName}!</h2>
           <p className="text-amber-200/90">{t('review_lessons_scores')}</p>
+          {weeklyHeroBadge ? (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-amber-400/20 px-4 py-2">
+              <Trophy className="w-4 h-4 text-amber-300" />
+              <span className="text-sm font-semibold text-amber-100">{weeklyHeroBadge.title} • TOP-{weeklyHeroBadge.rank}</span>
+              <span className="text-xs text-amber-200/90">{weeklyHeroBadge.weekKey} · {weeklyHeroBadge.badgeEndAt ? ` ${new Date(weeklyHeroBadge.badgeEndAt).toLocaleDateString()} gacha` : ''}</span>
+            </div>
+          ) : null}
         </motion.div>
 
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">

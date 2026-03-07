@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User, Search, Filter } from 'lucide-react';
+import { ArrowLeft, DollarSign, CheckCircle, XCircle, Clock, User, Search, Filter, Edit } from 'lucide-react';
 import { getPayments, addPayment, getStudents, Payment } from '@/lib/storage';
 import { useApp } from '@/lib/app-context';
 
@@ -11,11 +11,16 @@ export default function PaymentsPage() {
   const router = useRouter();
   const { t } = useApp();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [studentPickerSearch, setStudentPickerSearch] = useState('');
+  const [studentPickerGroup, setStudentPickerGroup] = useState('');
 
   const loadData = async () => {
     try {
@@ -96,11 +101,101 @@ export default function PaymentsPage() {
         paidAt: new Date().toISOString().split('T')[0],
         note: ''
       });
+      setStudentPickerSearch('');
+      setStudentPickerGroup('');
       setShowAddModal(false);
     } catch (error) {
       console.error('Payment save error:', error);
       const message = error instanceof Error ? error.message : t('failed_save_payment');
       alert(message);
+    }
+  };
+
+  const handleEditPayment = (payment: Payment) => {
+    setEditingPayment(payment);
+    setFormData({
+      studentId: String(payment.studentId || ''),
+      amount: Number(payment.amount || 0),
+      status: (String(payment.status || 'pending') as any),
+      startDate: payment.startDate ? String(payment.startDate).split('T')[0] : new Date().toISOString().split('T')[0],
+      endDate: payment.endDate
+        ? String(payment.endDate).split('T')[0]
+        : (payment.dueDate ? String(payment.dueDate).split('T')[0] : new Date().toISOString().split('T')[0]),
+      penaltyPerDay: Number(payment.penaltyPerDay || 10000),
+      paidAt: payment.paidAt ? String(payment.paidAt).split('T')[0] : new Date().toISOString().split('T')[0],
+      note: String(payment.note || ''),
+    });
+    setStudentPickerSearch('');
+    setStudentPickerGroup('');
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePayment = async () => {
+    if (!editingPayment) return;
+    if (!formData.studentId) {
+      alert(t('please_select_student'));
+      return;
+    }
+
+    if (formData.status === 'paid' && !formData.paidAt) {
+      alert(t('please_set_paid_date'));
+      return;
+    }
+
+    if (!formData.startDate || !formData.endDate) {
+      alert(t('please_set_payment_window'));
+      return;
+    }
+
+    if (new Date(formData.startDate) > new Date(formData.endDate)) {
+      alert(t('start_date_after_end'));
+      return;
+    }
+
+    const selectedStudent = (students || []).find((student) => String(student.id) === String(formData.studentId));
+
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: Number(editingPayment.id),
+          studentId: Number(formData.studentId),
+          studentName: selectedStudent?.fullName,
+          amount: Number(formData.amount || 0),
+          status: formData.status,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          dueDate: formData.endDate,
+          penaltyPerDay: Number(formData.penaltyPerDay || 10000),
+          paidAt: formData.status === 'paid' ? formData.paidAt : null,
+          note: formData.note.trim() || null,
+        })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || t('failed_update_parent'));
+      }
+
+      await loadData();
+      setFormData({
+        studentId: '',
+        amount: 500000,
+        status: 'pending',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        penaltyPerDay: 10000,
+        paidAt: new Date().toISOString().split('T')[0],
+        note: ''
+      });
+      setEditingPayment(null);
+      setStudentPickerSearch('');
+      setStudentPickerGroup('');
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Payment update error:', error);
+      alert(error instanceof Error ? error.message : t('failed_save_payment'));
     }
   };
 
@@ -117,7 +212,7 @@ export default function PaymentsPage() {
     switch (status) {
       case 'paid': return 'bg-green-100 text-green-700';
       case 'pending': return 'bg-orange-100 text-orange-700';
-      case 'overdue': return 'bg-red-100 text-red-700';
+      case 'overdue': return 'bg-rose-50 text-rose-700 border border-rose-200';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -166,6 +261,25 @@ export default function PaymentsPage() {
 
   const groupOptions = Array.from(new Set((students || []).map((student) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
 
+  const studentPickerGroupOptions = useMemo(() => {
+    return Array.from(new Set((students || []).map((student) => String(student.group || 'Not Assigned'))))
+      .sort((a, b) => a.localeCompare(b));
+  }, [students]);
+
+  const filteredStudentsForPicker = useMemo(() => {
+    const query = studentPickerSearch.trim().toLowerCase();
+    return (students || []).filter((student) => {
+      const group = String(student.group || 'Not Assigned');
+      const fullName = String(student.fullName || '').toLowerCase();
+      const username = String(student.username || '').toLowerCase();
+
+      const matchesGroup = !studentPickerGroup || group === studentPickerGroup;
+      const matchesSearch = !query || fullName.includes(query) || username.includes(query);
+
+      return matchesGroup && matchesSearch;
+    });
+  }, [students, studentPickerGroup, studentPickerSearch]);
+
   const filteredPayments = (payments || []).filter((payment) => {
     const query = searchTerm.trim().toLowerCase();
     const matchesSearch = !query || getStudentDisplayName(payment).toLowerCase().includes(query);
@@ -181,6 +295,53 @@ export default function PaymentsPage() {
     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return dateB - dateA;
   });
+
+  const monthlyPaidStats = useMemo(() => {
+    const [year, month] = String(selectedMonth || '').split('-').map((value) => Number(value));
+    if (!year || !month) {
+      return {
+        totalPaidAmount: 0,
+        paidCount: 0,
+        groupBreakdown: [] as Array<{ group: string; amount: number; count: number }>
+      };
+    }
+
+    const paidPaymentsInMonth = (payments || []).filter((payment) => {
+      const status = String(payment.status || '').toLowerCase();
+      if (status !== 'paid') return false;
+
+      const paidDateRaw = payment.paidAt || payment.createdAt;
+      if (!paidDateRaw) return false;
+
+      const paidDate = new Date(String(paidDateRaw));
+      if (Number.isNaN(paidDate.getTime())) return false;
+
+      const paidYear = paidDate.getFullYear();
+      const paidMonth = paidDate.getMonth() + 1;
+      return paidYear === year && paidMonth === month;
+    });
+
+    const totalPaidAmount = paidPaymentsInMonth.reduce((sum, payment) => sum + Number(payment.totalDue || payment.amount || 0), 0);
+    const groupMap = new Map<string, { amount: number; count: number }>();
+
+    paidPaymentsInMonth.forEach((payment) => {
+      const group = getStudentGroup(payment) || 'Not Assigned';
+      const item = groupMap.get(group) || { amount: 0, count: 0 };
+      item.amount += Number(payment.totalDue || payment.amount || 0);
+      item.count += 1;
+      groupMap.set(group, item);
+    });
+
+    const groupBreakdown = Array.from(groupMap.entries())
+      .map(([group, value]) => ({ group, amount: value.amount, count: value.count }))
+      .sort((a, b) => b.amount - a.amount || a.group.localeCompare(b.group));
+
+    return {
+      totalPaidAmount,
+      paidCount: paidPaymentsInMonth.length,
+      groupBreakdown,
+    };
+  }, [payments, students, selectedMonth]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -233,7 +394,7 @@ export default function PaymentsPage() {
             </button>
             <button
               onClick={() => setSelectedStatus('overdue')}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'overdue' ? 'bg-rose-600 text-white' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}`}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${selectedStatus === 'overdue' ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'}`}
             >
               Muddati o'tgan ({payments.filter((payment) => (payment.isOverdue ? 'overdue' : String(payment.status || 'pending')) === 'overdue').length})
             </button>
@@ -319,6 +480,10 @@ export default function PaymentsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
+                        <button onClick={() => handleEditPayment(payment)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium inline-flex items-center gap-1">
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>{t('edit')}</span>
+                        </button>
                         <button onClick={() => togglePaymentStatus(String(payment.id))} className="px-3 py-1.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 text-sm font-medium">
                           {payment.status === 'paid' ? t('mark_unpaid') : t('mark_paid')}
                         </button>
@@ -347,6 +512,53 @@ export default function PaymentsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="mt-8 bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Oylik sarhisob</h3>
+              <p className="text-sm text-gray-500">To'langan status bo'yicha oy kesimidagi tushum</p>
+            </div>
+            <div className="w-full md:w-[220px]">
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <p className="text-sm text-green-700">Jami tushum (oylik)</p>
+              <p className="text-2xl font-bold text-green-800">{formatCurrency(monthlyPaidStats.totalPaidAmount)}</p>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm text-blue-700">To'lov qilganlar soni</p>
+              <p className="text-2xl font-bold text-blue-800">{monthlyPaidStats.paidCount}</p>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Guruhlar kesimida tushum</h4>
+            {monthlyPaidStats.groupBreakdown.length > 0 ? (
+              <div className="space-y-2">
+                {monthlyPaidStats.groupBreakdown.map((item) => (
+                  <div key={item.group} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
+                    <div>
+                      <p className="font-medium text-gray-900">{item.group === 'Not Assigned' ? t('not_assigned') : item.group}</p>
+                      <p className="text-xs text-gray-500">To'lovlar soni: {item.count}</p>
+                    </div>
+                    <p className="font-semibold text-gray-900">{formatCurrency(item.amount)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">Bu oyda to'langan to'lovlar topilmadi</div>
+            )}
           </div>
         </div>
 
@@ -395,14 +607,39 @@ export default function PaymentsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={studentPickerSearch}
+                      onChange={(e) => setStudentPickerSearch(e.target.value)}
+                      placeholder="O'quvchi qidirish..."
+                      className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                    />
+                  </div>
+                  <select
+                    value={studentPickerGroup}
+                    onChange={(e) => setStudentPickerGroup(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                  >
+                    <option value="">Barcha guruhlar</option>
+                    {studentPickerGroupOptions.map((group) => (
+                      <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
                   <option value="">{t('select_student')}</option>
-                  {(students || []).map((student) => (
+                  {filteredStudentsForPicker.map((student) => (
                     <option key={student.id} value={student.id}>
-                      {student.fullName}
+                      {student.fullName} {student.group ? `— ${student.group}` : ''}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Topildi: {filteredStudentsForPicker.length} ta o'quvchi</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('amount_uzs')} *</label>
@@ -454,8 +691,106 @@ export default function PaymentsPage() {
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={() => { setShowAddModal(false); setStudentPickerSearch(''); setStudentPickerGroup(''); }} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
               <button onClick={handleAddPayment} className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl hover:shadow-lg">{t('add_payment')}</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full max-h-[92vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">To'lovni tahrirlash</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={studentPickerSearch}
+                      onChange={(e) => setStudentPickerSearch(e.target.value)}
+                      placeholder="O'quvchi qidirish..."
+                      className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                    />
+                  </div>
+                  <select
+                    value={studentPickerGroup}
+                    onChange={(e) => setStudentPickerGroup(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                  >
+                    <option value="">Barcha guruhlar</option>
+                    {studentPickerGroupOptions.map((group) => (
+                      <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none">
+                  <option value="">{t('select_student')}</option>
+                  {filteredStudentsForPicker.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.fullName} {student.group ? `— ${student.group}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Topildi: {filteredStudentsForPicker.length} ta o'quvchi</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('amount_uzs')} *</label>
+                <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value || 0) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_start_date')} *</label>
+                <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('payment_end_date')} *</label>
+                <input type="date" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('penalty_per_day_uzs')} *</label>
+                <input type="number" min="0" value={formData.penaltyPerDay} onChange={(e) => setFormData({ ...formData, penaltyPerDay: parseInt(e.target.value || '0', 10) })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('status')} *</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    status: e.target.value as any,
+                    paidAt: e.target.value === 'paid' ? formData.paidAt || new Date().toISOString().split('T')[0] : formData.paidAt
+                  })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                >
+                  <option value="pending">{t('pending')}</option>
+                  <option value="paid">{t('paid')}</option>
+                  <option value="overdue">{t('overdue')}</option>
+                </select>
+              </div>
+              {formData.status === 'paid' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('paid_at')} *</label>
+                  <input type="date" value={formData.paidAt} onChange={(e) => setFormData({ ...formData, paidAt: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('note_optional')}</label>
+                <textarea
+                  value={formData.note}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none"
+                  placeholder={t('payment_reminder_or_comment')}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <button onClick={() => { setShowEditModal(false); setEditingPayment(null); setStudentPickerSearch(''); setStudentPickerGroup(''); }} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={handleUpdatePayment} className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl hover:shadow-lg">Saqlash</button>
             </div>
           </motion.div>
         </div>

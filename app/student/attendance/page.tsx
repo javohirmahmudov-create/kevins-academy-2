@@ -4,43 +4,65 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { getDataForAdmin } from '@/lib/storage';
+import { useApp } from '@/lib/app-context';
 
 export default function StudentAttendancePage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const { currentStudent, t, language } = useApp();
+  const [student, setStudent] = useState<any>(null);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [stats, setStats] = useState({ present: 0, absent: 0, late: 0, total: 0 });
+  const adminScope = student?.adminId ? String(student.adminId) : 'system';
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/');
+    if (currentStudent) {
+      setStudent(currentStudent);
       return;
     }
-    
-    const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'student') {
-      router.push('/');
+
+    const stored = localStorage.getItem('currentStudent');
+    if (!stored) {
+      router.replace('/');
       return;
     }
-    
-    setUser(parsedUser);
-    loadAttendance(parsedUser);
-  }, [router]);
 
-  const loadAttendance = (student: any) => {
-    const allAttendance = JSON.parse(localStorage.getItem('kevins_academy_attendance') || '[]');
-    const studentAttendance = allAttendance.filter((a: any) => a.studentName === student.fullName);
-    setAttendance(studentAttendance.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    try {
+      setStudent(JSON.parse(stored));
+    } catch {
+      localStorage.removeItem('currentStudent');
+      router.replace('/');
+    }
+  }, [currentStudent, router]);
 
-    // Calculate stats
-    const present = studentAttendance.filter((a: any) => a.status === 'present').length;
-    const absent = studentAttendance.filter((a: any) => a.status === 'absent').length;
-    const late = studentAttendance.filter((a: any) => a.status === 'late').length;
-    setStats({ present, absent, late, total: studentAttendance.length });
-  };
+  useEffect(() => {
+    if (!student) return;
 
-  if (!user) return null;
+    (async () => {
+      try {
+        const allAttendance = (await getDataForAdmin(adminScope, 'attendance')) || [];
+        const studentAttendance = allAttendance
+          .filter((a: any) =>
+            String(a.studentId || '') === String(student.id) ||
+            a.studentName === student.fullName
+          )
+          .sort((a: any, b: any) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime());
+
+        setAttendance(studentAttendance);
+
+        const present = studentAttendance.filter((a: any) => a.status === 'present').length;
+        const absent = studentAttendance.filter((a: any) => a.status === 'absent').length;
+        const late = studentAttendance.filter((a: any) => a.status === 'late').length;
+        setStats({ present, absent, late, total: studentAttendance.length });
+      } catch (error) {
+        console.error('Error loading attendance:', error);
+        setAttendance([]);
+        setStats({ present: 0, absent: 0, late: 0, total: 0 });
+      }
+    })();
+  }, [student, adminScope]);
+
+  if (!student) return null;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -85,9 +107,9 @@ export default function StudentAttendancePage() {
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back to Dashboard</span>
+              <span>{t('back_to_dashboard')}</span>
             </button>
-            <h1 className="text-xl font-bold text-gray-900">My Attendance</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t('my_attendance')}</h1>
           </div>
         </div>
       </header>
@@ -102,7 +124,7 @@ export default function StudentAttendancePage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Attendance Rate</p>
+                <p className="text-sm text-gray-600 mb-1">{t('attendance_rate')}</p>
                 <p className="text-3xl font-bold text-gray-900">{attendanceRate}%</p>
               </div>
               <Calendar className="w-12 h-12 text-blue-500" />
@@ -117,7 +139,7 @@ export default function StudentAttendancePage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Present</p>
+                <p className="text-sm text-gray-600 mb-1">{t('present')}</p>
                 <p className="text-3xl font-bold text-green-600">{stats.present}</p>
               </div>
               <CheckCircle className="w-12 h-12 text-green-500" />
@@ -132,7 +154,7 @@ export default function StudentAttendancePage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Absent</p>
+                <p className="text-sm text-gray-600 mb-1">{t('absent')}</p>
                 <p className="text-3xl font-bold text-red-600">{stats.absent}</p>
               </div>
               <XCircle className="w-12 h-12 text-red-500" />
@@ -147,7 +169,7 @@ export default function StudentAttendancePage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Late</p>
+                <p className="text-sm text-gray-600 mb-1">{t('late')}</p>
                 <p className="text-3xl font-bold text-yellow-600">{stats.late}</p>
               </div>
               <Clock className="w-12 h-12 text-yellow-500" />
@@ -159,8 +181,8 @@ export default function StudentAttendancePage() {
         {attendance.length === 0 ? (
           <div className="text-center py-12">
             <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No attendance records</h3>
-            <p className="text-gray-600">Your teacher hasn't marked any attendance yet.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('no_attendance_records')}</h3>
+            <p className="text-gray-600">{t('teacher_no_attendance_yet')}</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -169,8 +191,8 @@ export default function StudentAttendancePage() {
                 <div className="px-6 py-4 border-b border-gray-100 bg-blue-50/70">
                   <span className="inline-flex items-center rounded-lg bg-white px-3 py-1 text-sm font-semibold text-gray-800 border border-blue-100">
                     {dateKey === 'unknown'
-                      ? 'Unknown Date'
-                      : new Date(dateKey).toLocaleDateString('en-US', {
+                      ? t('unknown_date')
+                      : new Date(dateKey).toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
@@ -181,8 +203,8 @@ export default function StudentAttendancePage() {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Notes</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('status')}</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">{t('comment')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -198,12 +220,12 @@ export default function StudentAttendancePage() {
                             <div className="flex items-center space-x-2">
                               {getStatusIcon(record.status)}
                               <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.status)}`}>
-                                {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                                {t(record.status || 'not_available')}
                               </span>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">
-                            {record.notes || '-'}
+                            {record.note || '-'}
                           </td>
                         </motion.tr>
                       ))}

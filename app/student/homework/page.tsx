@@ -1,231 +1,216 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { ArrowLeft, FileText, Calendar, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import { ArrowLeft, CalendarClock, Clock3, Eye, FileText, Link as LinkIcon, AlertCircle } from 'lucide-react'
+import { useApp } from '@/lib/app-context'
+
+type StudentTask = {
+  id: number
+  title: string
+  group: string
+  contentHtml: string
+  contentText: string
+  deadlineAt?: string | null
+  sentAt: string
+  status: 'active' | 'expired'
+  attachmentUrl?: string | null
+  attachmentType?: string | null
+  isRead: boolean
+}
 
 export default function StudentHomeworkPage() {
-  const router = useRouter();
-  const [homework, setHomework] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const router = useRouter()
+  const { currentStudent, t } = useApp()
+
+  const [student, setStudent] = useState<any>(null)
+  const [tasks, setTasks] = useState<StudentTask[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null)
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/');
-      return;
+    if (currentStudent) {
+      setStudent(currentStudent)
+      return
     }
-    
-    const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'student') {
-      router.push('/');
-      return;
-    }
-    
-    setUser(parsedUser);
-    loadHomework(parsedUser);
-  }, [router]);
 
-  const loadHomework = (student: any) => {
-    // For now, show sample homework with dates
-    // In production, this would come from localStorage or API
-    const sampleHomework = [
-      {
-        id: '1',
-        title: 'Grammar Exercise - Unit 5',
-        description: 'Complete exercises 1-10 on page 45',
-        dueDate: '2024-10-15',
-        status: 'pending',
-        subject: 'Grammar',
-        assignedDate: '2024-10-10'
-      },
-      {
-        id: '2',
-        title: 'Vocabulary Quiz Preparation',
-        description: 'Study vocabulary words from Unit 4',
-        dueDate: '2024-10-12',
-        status: 'completed',
-        subject: 'Vocabulary',
-        assignedDate: '2024-10-08'
-      },
-      {
-        id: '3',
-        title: 'Speaking Practice',
-        description: 'Record a 2-minute presentation about your favorite hobby',
-        dueDate: '2024-10-18',
-        status: 'pending',
-        subject: 'Speaking',
-        assignedDate: '2024-10-11'
-      },
-      {
-        id: '4',
-        title: 'Reading Comprehension',
-        description: 'Read the article and answer questions 1-5',
-        dueDate: '2024-10-20',
-        status: 'pending',
-        subject: 'Reading',
-        assignedDate: '2024-10-13'
+    const stored = localStorage.getItem('currentStudent')
+    if (!stored) {
+      router.replace('/')
+      return
+    }
+
+    try {
+      setStudent(JSON.parse(stored))
+    } catch {
+      localStorage.removeItem('currentStudent')
+      router.replace('/')
+    }
+  }, [currentStudent, router])
+
+  useEffect(() => {
+    if (!student?.id) return
+    void loadTasks(student)
+  }, [student])
+
+  const loadTasks = async (studentValue: any) => {
+    setLoading(true)
+    const adminId = String(studentValue?.adminId || '').trim()
+    if (!adminId) {
+      setTasks([])
+      setLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/tasks?mode=student&studentId=${encodeURIComponent(String(studentValue.id))}`, {
+        headers: {
+          'x-admin-id': adminId,
+        },
+      })
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(String(payload?.error || 'Tasklarni yuklab bo‘lmadi'))
       }
-    ];
-    
-    setHomework(sampleHomework);
-  };
-
-  if (!user) return null;
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'pending': return <Clock className="w-5 h-5 text-yellow-600" />;
-      case 'overdue': return <AlertCircle className="w-5 h-5 text-red-600" />;
-      default: return null;
+      setTasks(Array.isArray(payload) ? payload : [])
+    } catch (error) {
+      console.error('Student tasks load error:', error)
+      setTasks([])
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-50 text-green-700 border-green-200';
-      case 'pending': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-      case 'overdue': return 'bg-red-50 text-red-700 border-red-200';
-      default: return 'bg-gray-50 text-gray-700 border-gray-200';
+  const markAsRead = async (taskId: number) => {
+    if (!student?.id || !student?.adminId) return
+    try {
+      await fetch('/api/tasks/read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': String(student.adminId),
+        },
+        body: JSON.stringify({
+          taskId,
+          studentId: Number(student.id),
+        }),
+      })
+
+      setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, isRead: true } : task)))
+    } catch (error) {
+      console.error('Task read receipt error:', error)
     }
-  };
+  }
 
-  const getSubjectColor = (subject: string) => {
-    const colors: any = {
-      'Grammar': 'bg-purple-100 text-purple-700',
-      'Vocabulary': 'bg-blue-100 text-blue-700',
-      'Speaking': 'bg-green-100 text-green-700',
-      'Reading': 'bg-orange-100 text-orange-700',
-      'Writing': 'bg-pink-100 text-pink-700',
-      'Listening': 'bg-teal-100 text-teal-700'
-    };
-    return colors[subject] || 'bg-gray-100 text-gray-700';
-  };
+  const toggleTask = async (taskId: number) => {
+    const next = expandedTaskId === taskId ? null : taskId
+    setExpandedTaskId(next)
 
-  const pendingCount = homework.filter(h => h.status === 'pending').length;
-  const completedCount = homework.filter(h => h.status === 'completed').length;
+    if (next) {
+      const target = tasks.find((task) => task.id === taskId)
+      if (target && !target.isRead) {
+        await markAsRead(taskId)
+      }
+    }
+  }
+
+  const activeCount = useMemo(() => tasks.filter((task) => task.status === 'active').length, [tasks])
+  const expiredCount = useMemo(() => tasks.filter((task) => task.status === 'expired').length, [tasks])
+
+  if (!student) return null
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-black to-zinc-900 text-zinc-100">
+      <header className="sticky top-0 z-50 border-b border-amber-500/20 bg-black/80 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => router.push('/student')}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Dashboard</span>
+            <button onClick={() => router.push('/student')} className="flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800">
+              <ArrowLeft className="h-4 w-4" />
+              <span>{t('back_to_dashboard')}</span>
             </button>
-            <h1 className="text-xl font-bold text-gray-900">Homework</h1>
+            <h1 className="text-xl font-bold text-amber-300">My Tasks</h1>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-yellow-500 to-orange-600 rounded-2xl p-6 text-white"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white/80 mb-1">Pending Tasks</p>
-                <p className="text-4xl font-bold">{pendingCount}</p>
-              </div>
-              <Clock className="w-16 h-16 text-white/20" />
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-gradient-to-r from-green-500 to-teal-600 rounded-2xl p-6 text-white"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white/80 mb-1">Completed</p>
-                <p className="text-4xl font-bold">{completedCount}</p>
-              </div>
-              <CheckCircle className="w-16 h-16 text-white/20" />
-            </div>
-          </motion.div>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+            <p className="text-sm text-emerald-200">Active</p>
+            <p className="mt-1 text-3xl font-bold text-emerald-100">{activeCount}</p>
+          </div>
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-5">
+            <p className="text-sm text-rose-200">Expired</p>
+            <p className="mt-1 text-3xl font-bold text-rose-100">{expiredCount}</p>
+          </div>
         </div>
 
-        {/* Homework List */}
-        {homework.length === 0 ? (
-          <div className="text-center py-12">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No homework assigned</h3>
-            <p className="text-gray-600">Your teacher hasn't assigned any homework yet.</p>
+        {loading ? (
+          <p className="text-sm text-zinc-400">Yuklanmoqda...</p>
+        ) : tasks.length === 0 ? (
+          <div className="rounded-2xl border border-zinc-700 bg-zinc-900/60 p-10 text-center">
+            <FileText className="mx-auto mb-3 h-10 w-10 text-zinc-500" />
+            <h3 className="text-lg font-semibold text-zinc-200">Vazifalar topilmadi</h3>
+            <p className="text-sm text-zinc-400">Sizning darajangiz uchun hozircha yangi topshiriq yo‘q.</p>
           </div>
         ) : (
-          <div className="space-y-8">
-            {Object.entries(
-              homework.reduce((acc: any, task: any) => {
-                const date = task.assignedDate;
-                if (!acc[date]) acc[date] = [];
-                acc[date].push(task);
-                return acc;
-              }, {})
-            ).map(([date, dateTasks]: [string, any]) => (
-              <div key={date}>
-                <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                  <span className="bg-green-100 text-green-700 px-4 py-2 rounded-lg">
-                    {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                  </span>
-                </h2>
-                <div className="space-y-4">
-                  {dateTasks.map((task: any, index: number) => (
-                    <motion.div
-                      key={task.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <h3 className="text-lg font-bold text-gray-900">{task.title}</h3>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getSubjectColor(task.subject)}`}>
-                              {task.subject}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mb-3">{task.description}</p>
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            <div className="flex items-center space-x-1">
-                              <Calendar className="w-4 h-4" />
-                              <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(task.status)}
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(task.status)}`}>
-                            {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {task.status === 'pending' && (
-                        <button className="w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all">
-                          Mark as Complete
-                        </button>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-4">
+            {tasks.map((task, index) => {
+              const expanded = expandedTaskId === task.id
+              return (
+                <motion.div
+                  key={task.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 shadow-2xl shadow-black/40"
+                >
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-bold text-amber-300">{task.title}</h2>
+                      <p className="text-xs text-zinc-400">{task.group}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {task.status === 'expired' && <AlertCircle className="h-4 w-4 text-rose-300" />}
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${task.status === 'expired' ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                        {task.status === 'expired' ? 'Expired' : 'Active'}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 text-xs ${task.isRead ? 'bg-blue-500/20 text-blue-300' : 'bg-zinc-700 text-zinc-200'}`}>
+                        {task.isRead ? 'Opened' : 'New'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
+                    <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> Yuborilgan: {new Date(task.sentAt).toLocaleString('uz-UZ')}</span>
+                    <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" /> Muddat: {task.deadlineAt ? new Date(task.deadlineAt).toLocaleString('uz-UZ') : '-'}</span>
+                    {task.attachmentUrl && (
+                      <a href={task.attachmentUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-amber-300 underline">
+                        <LinkIcon className="h-3.5 w-3.5" /> Biriktirma
+                      </a>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => void toggleTask(task.id)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs hover:bg-zinc-800"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {expanded ? 'Yopish' : 'Batafsil ko‘rish'}
+                  </button>
+
+                  {expanded && (
+                    <div className="mt-4 rounded-xl border border-zinc-700 bg-zinc-900/70 p-4 text-sm text-zinc-200">
+                      <div dangerouslySetInnerHTML={{ __html: task.contentHtml || task.contentText || '-' }} />
+                    </div>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         )}
       </main>
     </div>
-  );
+  )
 }

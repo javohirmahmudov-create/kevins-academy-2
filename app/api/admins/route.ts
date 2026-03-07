@@ -14,7 +14,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const admin = await prisma.admin.create({ data: body })
+    const createData: any = {
+      ...body,
+      contactPhone: typeof body.contactPhone === 'string' ? body.contactPhone.trim() || null : null,
+      telegramUsername: typeof body.telegramUsername === 'string' ? body.telegramUsername.trim() || null : null,
+      notifyTelegram: body.notifyTelegram !== undefined ? Boolean(body.notifyTelegram) : true,
+      notifySms: body.notifySms !== undefined ? Boolean(body.notifySms) : true,
+    }
+    const admin = await prisma.admin.create({
+      data: createData
+    })
     return NextResponse.json(admin)
   } catch (error) {
     console.error('POST /api/admins error:', error)
@@ -26,9 +35,16 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, ...data } = body;
+    const normalizedData: any = {
+      ...data,
+      contactPhone: typeof data.contactPhone === 'string' ? data.contactPhone.trim() || null : data.contactPhone,
+      telegramUsername: typeof data.telegramUsername === 'string' ? data.telegramUsername.trim() || null : data.telegramUsername,
+      notifyTelegram: data.notifyTelegram !== undefined ? Boolean(data.notifyTelegram) : undefined,
+      notifySms: data.notifySms !== undefined ? Boolean(data.notifySms) : undefined,
+    }
     const updated = await prisma.admin.update({
       where: { id: parseInt(id) },
-      data,
+      data: normalizedData,
     });
     return NextResponse.json(updated);
   } catch (error) {

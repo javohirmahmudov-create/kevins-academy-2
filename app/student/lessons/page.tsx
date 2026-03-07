@@ -9,9 +9,10 @@ import { useApp } from '@/lib/app-context';
 
 export default function StudentLessonsPage() {
   const router = useRouter();
-  const { currentStudent, t } = useApp();
+  const { currentStudent, t, language } = useApp();
   const [student, setStudent] = useState<any | null>(null);
   const [materials, setMaterials] = useState<any[]>([]);
+  const adminScope = student?.adminId ? String(student.adminId) : 'system';
 
   useEffect(() => {
     if (currentStudent) {
@@ -37,7 +38,7 @@ export default function StudentLessonsPage() {
 
     (async () => {
       try {
-        const allMaterials = (await getDataForAdmin('system', 'materials')) || [];
+        const allMaterials = (await getDataForAdmin(adminScope, 'materials')) || [];
         const normalizedStudentGroup = String(student.group || '').trim().toLowerCase();
         const studentMaterials = allMaterials
           .filter((m: any) => {
@@ -45,14 +46,18 @@ export default function StudentLessonsPage() {
             const materialGroup = String(m.group || '').trim().toLowerCase();
             return materialGroup === normalizedStudentGroup;
           })
-          .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+          .sort((a: any, b: any) => {
+            const aDate = new Date(a.uploadedAt || a.createdAt || 0).getTime();
+            const bDate = new Date(b.uploadedAt || b.createdAt || 0).getTime();
+            return bDate - aDate;
+          });
 
         setMaterials(studentMaterials);
       } catch (error) {
         console.error('Error loading materials:', error);
       }
     })();
-  }, [student]);
+  }, [student, adminScope]);
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -150,9 +155,9 @@ export default function StudentLessonsPage() {
               className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span>Back to Dashboard</span>
+              <span>{t('back_to_dashboard')}</span>
             </button>
-            <h1 className="text-xl font-bold text-gray-900">My Lessons</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t('my_lessons')}</h1>
           </div>
         </div>
       </header>
@@ -161,14 +166,14 @@ export default function StudentLessonsPage() {
         {materials.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No materials yet</h3>
-            <p className="text-gray-600">Your teacher hasn't uploaded any materials for your group yet.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('no_materials_yet')}</h3>
+            <p className="text-gray-600">{t('teacher_no_materials_group')}</p>
           </div>
         ) : (
           <div className="space-y-8">
             {Object.entries(
               materials.reduce((acc: any, material: any) => {
-                const date = material.uploadedAt;
+                const date = String(material.uploadedAt || material.createdAt || new Date().toISOString()).split('T')[0];
                 if (!acc[date]) acc[date] = [];
                 acc[date].push(material);
                 return acc;
@@ -177,7 +182,7 @@ export default function StudentLessonsPage() {
               <div key={date}>
                 <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
                   <span className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg">
-                    {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    {new Date(date).toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </span>
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -214,7 +219,7 @@ export default function StudentLessonsPage() {
                         )}
                         {material.dueDate && (
                           <p className="text-sm text-orange-600 font-medium">
-                            Due: {new Date(material.dueDate).toLocaleDateString()}
+                            {t('due_date')}: {new Date(material.dueDate).toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'en-US')}
                           </p>
                         )}
                       </div>
@@ -227,7 +232,7 @@ export default function StudentLessonsPage() {
                             controls
                             width="100%"
                             className="w-full h-auto max-h-72 object-contain"
-                            preload="metadata"
+                            preload="auto"
                           />
                         </div>
                         <button
@@ -243,13 +248,13 @@ export default function StudentLessonsPage() {
                             className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-slate-50 text-slate-700 rounded-xl hover:bg-slate-100"
                           >
                             <Rewind className="w-4 h-4" />
-                            <span>&lt;&lt; 10s</span>
+                            <span>{t('rewind_10s')}</span>
                           </button>
                           <button
                             onClick={() => seekVideo(material.id, 10, material.fileUrl)}
                             className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-slate-50 text-slate-700 rounded-xl hover:bg-slate-100"
                           >
-                            <span>10s &gt;&gt;</span>
+                            <span>{t('forward_10s')}</span>
                             <FastForward className="w-4 h-4" />
                           </button>
                         </div>
@@ -261,7 +266,7 @@ export default function StudentLessonsPage() {
                           className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all"
                         >
                           <Download className="w-4 h-4" />
-                          <span>Download</span>
+                          <span>{t('download')}</span>
                         </a>
                       )}
                     </motion.div>

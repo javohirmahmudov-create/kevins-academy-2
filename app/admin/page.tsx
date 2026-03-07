@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeLanguageToggle } from '@/components/theme-language-toggle';
 import { useApp } from '@/lib/app-context';
-import { getStudents, getGroups, getPayments, getAttendance } from '@/lib/storage';
+import { getStudents, getGroups, getPayments, getAttendance, updateAdmin } from '@/lib/storage';
 import {
   Users,
   BookOpen,
@@ -15,10 +15,29 @@ import {
   DollarSign,
   TrendingUp,
   Award,
+  Activity,
   GraduationCap,
   LogOut,
-  Shield
+  Shield,
+  Brain,
+  AlertTriangle,
+  ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  X
 } from 'lucide-react';
+
+type DisconnectedParentRow = {
+  parentId: number;
+  parentName: string;
+  parentPhone: string;
+  studentId: number | null;
+  studentName: string;
+  level: string;
+  statusText: string;
+  disconnectedAt: string;
+  lastError?: string;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -30,6 +49,12 @@ export default function AdminDashboard() {
     pendingPayments: 0,
     todayAttendance: 0
   });
+  const [notifyTelegram, setNotifyTelegram] = useState(true);
+  const [notifySms, setNotifySms] = useState(true);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [disconnectedRows, setDisconnectedRows] = useState<DisconnectedParentRow[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [showDisconnectedPanel, setShowDisconnectedPanel] = useState(false);
 
   useEffect(() => {
     if (!currentAdmin) {
@@ -38,8 +63,20 @@ export default function AdminDashboard() {
     }
 
     setUser(currentAdmin);
+    setNotifyTelegram(currentAdmin?.notifyTelegram !== false);
+    setNotifySms(currentAdmin?.notifySms !== false);
     loadStats();
+    loadDisconnectedAlerts();
   }, [currentAdmin, router]);
+
+  useEffect(() => {
+    if (!currentAdmin?.id) return;
+    const timer = setInterval(() => {
+      loadDisconnectedAlerts();
+    }, 20000);
+
+    return () => clearInterval(timer);
+  }, [currentAdmin?.id]);
 
   // Listen for theme changes
   useEffect(() => {
@@ -59,14 +96,37 @@ export default function AdminDashboard() {
       const payments = await getPayments();
       const attendance = await getAttendance();
 
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
+      const isSameLocalDay = (value?: string | null, targetDate?: Date) => {
+        if (!value) return false;
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return false;
+        const target = targetDate || new Date();
+        return parsed.getFullYear() === target.getFullYear()
+          && parsed.getMonth() === target.getMonth()
+          && parsed.getDate() === target.getDate();
+      };
+
+      const pendingOrOverduePayments = (Array.isArray(payments) ? payments : []).filter((payment: any) => {
+        const displayStatus = payment?.isOverdue ? 'overdue' : String(payment?.status || 'pending').toLowerCase();
+        return displayStatus === 'pending' || displayStatus === 'overdue';
+      }).length;
+
+      const todayAttendanceCount = (Array.isArray(attendance) ? attendance : []).filter((row: any) => {
+        if (isSameLocalDay(row?.date)) return true;
+        if (typeof row?.date === 'string' && row.date.trim()) {
+          const direct = row.date.trim().split('T')[0];
+          const now = new Date();
+          const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          return direct === todayLocal;
+        }
+        return false;
+      }).length;
 
       setStats({
         totalStudents: students.length,
         activeGroups: groups.length,
-        pendingPayments: payments.filter(p => p.status === 'pending').length,
-        todayAttendance: attendance.filter(a => a.date === today).length
+        pendingPayments: pendingOrOverduePayments,
+        todayAttendance: todayAttendanceCount
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -80,9 +140,89 @@ export default function AdminDashboard() {
     }
   };
 
+  const loadDisconnectedAlerts = async () => {
+    if (!currentAdmin?.id) return;
+    setAlertsLoading(true);
+    try {
+      const response = await fetch('/api/admin/alerts/disconnected-parents', {
+        headers: {
+          'x-admin-id': String(currentAdmin.id),
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(String(data?.error || 'Alertlarni yuklashda xatolik'));
+      }
+      setDisconnectedRows(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (error) {
+      console.error('Disconnected alerts load failed:', error);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     logoutAdmin();
     router.push('/');
+  };
+
+  const dismissDisconnectedAlerts = async (parentIds: number[]) => {
+    const cleanIds = Array.from(new Set((parentIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
+    if (cleanIds.length === 0 || !currentAdmin?.id) return;
+
+    try {
+      const response = await fetch('/api/admin/alerts/disconnected-parents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': String(currentAdmin.id),
+        },
+        body: JSON.stringify({ parentIds: cleanIds }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(String(data?.error || 'Alertni o‘chirishda xatolik'));
+      }
+
+      await loadDisconnectedAlerts();
+    } catch (error) {
+      console.error('Dismiss disconnected alert failed:', error);
+    }
+  };
+
+  const handleDismissDisconnectedAlert = async (parentId: number) => {
+    await dismissDisconnectedAlerts([parentId]);
+  };
+
+  const handleDismissAllDisconnectedAlerts = async () => {
+    await dismissDisconnectedAlerts(disconnectedRows.map((row) => Number(row.parentId)));
+  };
+
+  const saveNotificationSettings = async () => {
+    if (!user?.id) return;
+    setSettingsSaving(true);
+    try {
+      const updated = await updateAdmin(String(user.id), {
+        notifyTelegram,
+        notifySms,
+      });
+
+      const nextAdmin = {
+        ...(currentAdmin || {}),
+        ...(updated || {}),
+        notifyTelegram,
+        notifySms,
+      };
+
+      localStorage.setItem('currentAdmin', JSON.stringify(nextAdmin));
+      setUser(nextAdmin);
+    } catch (error) {
+      console.error('Notification settings save failed:', error);
+      alert('Settings saqlanmadi');
+    } finally {
+      setSettingsSaving(false);
+    }
   };
 
   if (!user) return null;
@@ -95,6 +235,9 @@ export default function AdminDashboard() {
     { icon: BarChart3, label: t('scores'), href: '/admin/scores', color: 'from-orange-500 to-orange-600' },
     { icon: Calendar, label: t('attendance'), href: '/admin/attendance', color: 'from-pink-500 to-pink-600' },
     { icon: DollarSign, label: t('payments'), href: '/admin/payments', color: 'from-teal-500 to-teal-600' },
+    { icon: Activity, label: 'Foydalanuvchilar Faolligi', href: '/admin/activity', color: 'from-amber-500 to-yellow-600' },
+    { icon: ClipboardList, label: 'Task Dispatcher', href: '/admin/tasks', color: 'from-yellow-500 to-amber-600' },
+    { icon: Brain, label: 'Vocabulary Live', href: '/admin/vocabulary', color: 'from-indigo-500 to-violet-600' },
   ];
 
   const statCards = [
@@ -103,6 +246,8 @@ export default function AdminDashboard() {
     { label: t('pending_payments'), value: stats.pendingPayments, icon: DollarSign, color: 'bg-orange-500', href: '/admin/payments' },
     { label: t('today_attendance'), value: stats.todayAttendance, icon: Calendar, color: 'bg-green-500', href: '/admin/attendance' },
   ];
+
+  const visibleDisconnectedRows = disconnectedRows;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-slate-900 dark:via-red-900/20 dark:to-slate-900">
@@ -139,6 +284,77 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-2xl border border-red-500/40 bg-gradient-to-r from-black via-zinc-900 to-zinc-800 p-4 shadow-2xl"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <h2 className="text-base font-bold text-amber-300">🚨 Aloqasi uzilgan ota-onalar</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/40">
+                {alertsLoading ? 'Yangilanmoqda...' : `${visibleDisconnectedRows.length} ta`}
+              </span>
+              {visibleDisconnectedRows.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDisconnectedPanel((prev) => !prev)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-200 hover:bg-red-500/20"
+                >
+                  {showDisconnectedPanel ? 'Yig\'ish' : 'Ko\'rish'}
+                  {showDisconnectedPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {visibleDisconnectedRows.length === 0 ? (
+            <p className="mt-2 text-sm text-emerald-300">Hozircha uzilgan aloqa aniqlanmadi.</p>
+          ) : showDisconnectedPanel ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleDismissAllDisconnectedAlerts}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-200 hover:bg-red-500/20"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Hammasini o‘chirish
+                </button>
+              </div>
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                {visibleDisconnectedRows.map((row) => (
+                  <div key={row.parentId} className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                      <p className="text-amber-100"><span className="text-amber-300">Ota-ona / Tel:</span> {row.parentName} / {row.parentPhone || '-'}</p>
+                      <p className="text-amber-100"><span className="text-amber-300">Farzandi / Level:</span> {row.studentName} - {row.level}</p>
+                      <p className="text-red-300 font-semibold">{row.statusText}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-amber-200 text-xs md:text-sm">{new Date(row.disconnectedAt).toLocaleString()}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleDismissDisconnectedAlert(row.parentId)}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-[11px] text-red-200 hover:bg-red-500/20"
+                          title="Xabarni o‘chirish"
+                        >
+                          <X className="w-3 h-3" /> O‘chirish
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-red-200">
+              {visibleDisconnectedRows.length} ta ogohlantirish mavjud. “Ko‘rish” tugmasini bosing.
+            </p>
+          )}
+        </motion.div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {statCards.map((stat, index) => (
@@ -214,6 +430,42 @@ export default function AdminDashboard() {
               <p className="text-sm opacity-90 mt-1">{t('add_learning_resources')}</p>
             </button>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.1 }}
+          className="mt-8 bg-white dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700"
+        >
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Settings · Bildirishnomalar</h3>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+              <span className="text-sm text-gray-800 dark:text-gray-200">Telegram xabarlarini yuborish</span>
+              <input
+                type="checkbox"
+                checked={notifyTelegram}
+                onChange={(e) => setNotifyTelegram(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </label>
+            <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+              <span className="text-sm text-gray-800 dark:text-gray-200">SMS xabarlarini yuborish</span>
+              <input
+                type="checkbox"
+                checked={notifySms}
+                onChange={(e) => setNotifySms(e.target.checked)}
+                className="h-4 w-4"
+              />
+            </label>
+          </div>
+          <button
+            onClick={saveNotificationSettings}
+            disabled={settingsSaving}
+            className="mt-4 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+          >
+            {settingsSaving ? 'Saqlanmoqda...' : 'Saqlash'}
+          </button>
         </motion.div>
       </main>
     </div>

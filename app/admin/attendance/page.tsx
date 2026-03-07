@@ -33,6 +33,8 @@ export default function AttendancePage() {
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [studentPickerSearch, setStudentPickerSearch] = useState('');
+  const [studentPickerGroup, setStudentPickerGroup] = useState('');
   const [formData, setFormData] = useState<{
     studentId: string;
     date: string;
@@ -90,6 +92,8 @@ export default function AttendancePage() {
       await addAttendance(newAttendance);
       await loadData();
       setFormData({ studentId: '', date: new Date().toISOString().split('T')[0], status: 'present', note: '' });
+      setStudentPickerSearch('');
+      setStudentPickerGroup('');
       setShowMarkModal(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : t('failed_mark_attendance');
@@ -124,6 +128,20 @@ export default function AttendancePage() {
   };
 
   const groupOptions = Array.from(new Set((students || []).map((student) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
+
+  const studentPickerGroupOptions = Array.from(new Set((students || []).map((student) => student.group || 'Not Assigned'))).sort((a, b) => a.localeCompare(b));
+
+  const filteredStudentsForPicker = (students || []).filter((student) => {
+    const query = studentPickerSearch.trim().toLowerCase();
+    const fullName = String(student.fullName || '').toLowerCase();
+    const username = String((student as any).username || '').toLowerCase();
+    const group = String(student.group || 'Not Assigned');
+
+    const matchesSearch = !query || fullName.includes(query) || username.includes(query);
+    const matchesGroup = !studentPickerGroup || group === studentPickerGroup;
+
+    return matchesSearch && matchesGroup;
+  });
 
   const filteredAttendance = (attendance || []).filter((record) => {
     const query = searchTerm.trim().toLowerCase();
@@ -270,14 +288,34 @@ export default function AttendancePage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('student')} *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={studentPickerSearch}
+                    onChange={(e) => setStudentPickerSearch(e.target.value)}
+                    placeholder="O'quvchi qidirish..."
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none"
+                  />
+                  <select
+                    value={studentPickerGroup}
+                    onChange={(e) => setStudentPickerGroup(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none"
+                  >
+                    <option value="">{t('all_groups')}</option>
+                    {studentPickerGroupOptions.map((group) => (
+                      <option key={group} value={group}>{group === 'Not Assigned' ? t('not_assigned') : group}</option>
+                    ))}
+                  </select>
+                </div>
                 <select value={formData.studentId} onChange={(e) => setFormData({ ...formData, studentId: e.target.value })} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none">
                   <option value="">{t('select_student')}</option>
-                  {(students || []).map((student) => (
+                  {filteredStudentsForPicker.map((student) => (
                     <option key={student.id} value={student.id}>
-                      {student.fullName}
+                      {student.fullName} {student.group ? `— ${student.group}` : ''}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">Topildi: {filteredStudentsForPicker.length} ta o'quvchi</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('date')} *</label>
@@ -310,7 +348,7 @@ export default function AttendancePage() {
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={() => setShowMarkModal(false)} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={() => { setShowMarkModal(false); setStudentPickerSearch(''); setStudentPickerGroup(''); }} className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50">{t('cancel')}</button>
               <button onClick={handleMarkAttendance} className="flex-1 px-4 py-3 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-xl hover:shadow-lg">{t('mark')}</button>
             </div>
           </motion.div>

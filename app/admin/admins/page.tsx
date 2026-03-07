@@ -27,13 +27,15 @@ export default function AdminManagement() {
     username: '',
     password: '',
     fullName: '',
-    email: ''
+    contactPhone: '',
+    telegramUsername: ''
   });
   const [editForm, setEditForm] = useState({
     username: '',
     password: '',
     fullName: '',
-    email: ''
+    contactPhone: '',
+    telegramUsername: ''
   });
 
   useEffect(() => {
@@ -64,14 +66,14 @@ export default function AdminManagement() {
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newAdmin.username || !newAdmin.password || !newAdmin.fullName || !newAdmin.email) {
+    if (!newAdmin.username || !newAdmin.password || !newAdmin.fullName) {
       alert(t('please_fill_all_fields'));
       return;
     }
 
     try {
       await createAdmin(newAdmin);
-      setNewAdmin({ username: '', password: '', fullName: '', email: '' });
+      setNewAdmin({ username: '', password: '', fullName: '', contactPhone: '', telegramUsername: '' });
       setShowCreateForm(false);
       await loadAdmins();
       alert(t('admin_created_successfully'));
@@ -86,14 +88,15 @@ export default function AdminManagement() {
       username: admin.username,
       password: admin.password,
       fullName: admin.fullName,
-      email: admin.email
+      contactPhone: admin.contactPhone || '',
+      telegramUsername: admin.telegramUsername || ''
     });
   };
 
   const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!editingAdmin || !editForm.username || !editForm.password || !editForm.fullName || !editForm.email) {
+    if (!editingAdmin || !editForm.username || !editForm.password || !editForm.fullName) {
       alert(t('please_fill_all_fields'));
       return;
     }
@@ -101,7 +104,7 @@ export default function AdminManagement() {
     try {
       await updateAdmin(String(editingAdmin.id), editForm);
       setEditingAdmin(null);
-      setEditForm({ username: '', password: '', fullName: '', email: '' });
+      setEditForm({ username: '', password: '', fullName: '', contactPhone: '', telegramUsername: '' });
       await loadAdmins();
       alert(t('admin_updated_successfully'));
     } catch (error) {
@@ -268,15 +271,27 @@ export default function AdminManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Email
+                    Aloqa telefoni
                   </label>
                   <input
-                    type="email"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                    type="text"
+                    value={editForm.contactPhone}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, contactPhone: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Enter email"
-                    required
+                    placeholder="+998901234567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Telegram username
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.telegramUsername}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, telegramUsername: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="@username"
                   />
                 </div>
               </div>
@@ -354,15 +369,27 @@ export default function AdminManagement() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Email
+                    Aloqa telefoni
                   </label>
                   <input
-                    type="email"
-                    value={newAdmin.email}
-                    onChange={(e) => setNewAdmin(prev => ({ ...prev, email: e.target.value }))}
+                    type="text"
+                    value={newAdmin.contactPhone}
+                    onChange={(e) => setNewAdmin(prev => ({ ...prev, contactPhone: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Enter email"
-                    required
+                    placeholder="+998901234567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Telegram username
+                  </label>
+                  <input
+                    type="text"
+                    value={newAdmin.telegramUsername}
+                    onChange={(e) => setNewAdmin(prev => ({ ...prev, telegramUsername: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="@username"
                   />
                 </div>
               </div>
@@ -412,7 +439,15 @@ export default function AdminManagement() {
               <div className="space-y-2">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{admin.fullName}</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">@{admin.username}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">{admin.email}</p>
+                {admin.email ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{admin.email}</p>
+                ) : null}
+                {admin.contactPhone ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{admin.contactPhone}</p>
+                ) : null}
+                {admin.telegramUsername ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{admin.telegramUsername}</p>
+                ) : null}
                 <p className="text-xs text-gray-500 dark:text-gray-500">
                   Created: {new Date(admin.createdAt).toLocaleDateString()}
                 </p>

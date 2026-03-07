@@ -210,6 +210,12 @@ export default function MaterialsPage() {
     video.play().catch(() => undefined);
   };
 
+  const actionButtonBaseClass = 'flex-1 min-h-14 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border transition-all duration-200 ease-out shadow-sm hover:-translate-y-0.5 hover:shadow-md active:translate-y-0';
+  const videoSeekButtonClass = `${actionButtonBaseClass} border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100 text-slate-700 hover:from-slate-100 hover:to-slate-200`;
+  const fullscreenButtonClass = `${actionButtonBaseClass} border-indigo-200 bg-gradient-to-b from-indigo-50 to-indigo-100 text-indigo-700 hover:from-indigo-100 hover:to-indigo-200`;
+  const downloadButtonClass = `${actionButtonBaseClass} border-emerald-200 bg-gradient-to-b from-emerald-50 to-emerald-100 text-emerald-700 hover:from-emerald-100 hover:to-emerald-200`;
+  const deleteButtonClass = `${actionButtonBaseClass} border-rose-200 bg-gradient-to-b from-rose-50 to-rose-100 text-rose-700 hover:from-rose-100 hover:to-rose-200`;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -288,31 +294,31 @@ export default function MaterialsPage() {
                         />
                       </div>
                     )}
-                    <div className="flex space-x-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
                       {(material.fileType || material.type) === 'video' && material.fileUrl && (
                         <button
                           onClick={() => seekVideo(material.id, -10, material.fileUrl)}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100"
+                          className={videoSeekButtonClass}
                         >
                           <Rewind className="w-4 h-4" />
-                          <span className="text-sm">&lt;&lt; 10s</span>
+                          <span className="text-sm font-semibold tracking-tight">&lt;&lt; 10s</span>
                         </button>
                       )}
                       {(material.fileType || material.type) === 'video' && material.fileUrl && (
                         <button
                           onClick={() => openVideoFullscreen(material.id, material.fileUrl)}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100"
+                          className={fullscreenButtonClass}
                         >
                           <Maximize className="w-4 h-4" />
-                          <span className="text-sm">{t('fullscreen')}</span>
+                          <span className="text-sm font-semibold tracking-tight">{t('fullscreen')}</span>
                         </button>
                       )}
                       {(material.fileType || material.type) === 'video' && material.fileUrl && (
                         <button
                           onClick={() => seekVideo(material.id, 10, material.fileUrl)}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-slate-50 text-slate-700 rounded-lg hover:bg-slate-100"
+                          className={videoSeekButtonClass}
                         >
-                          <span className="text-sm">10s &gt;&gt;</span>
+                          <span className="text-sm font-semibold tracking-tight">10s &gt;&gt;</span>
                           <FastForward className="w-4 h-4" />
                         </button>
                       )}
@@ -320,10 +326,10 @@ export default function MaterialsPage() {
                         <a
                           href={material.fileUrl}
                           download={material.title}
-                          className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
+                          className={downloadButtonClass}
                         >
                           <Download className="w-4 h-4" />
-                          <span className="text-sm">{t('download')}</span>
+                          <span className="text-sm font-semibold tracking-tight">{t('download')}</span>
                         </a>
                       )}
                       <button
@@ -338,10 +344,10 @@ export default function MaterialsPage() {
                           );
                           setMaterials(sortedMaterials);
                         }}
-                        className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                        className={deleteButtonClass}
                       >
                         <Trash2 className="w-4 h-4" />
-                        <span className="text-sm">{t('delete')}</span>
+                        <span className="text-sm font-semibold tracking-tight">{t('delete')}</span>
                       </button>
                     </div>
                   </motion.div>

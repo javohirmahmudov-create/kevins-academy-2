@@ -13,7 +13,27 @@ model Admin {
   password  String
   fullName  String
   email     String?
+  contactPhone String?
+  telegramUsername String?
+  notifyTelegram Boolean @default(true)
+  notifySms Boolean @default(true)
   createdAt DateTime  @default(now())
+}
+
+model NotificationLog {
+  id        Int      @id @default(autoincrement())
+  channel   String
+  type      String
+  status    String
+  recipient String?
+  adminId   Int?
+  studentId Int?
+  message   String
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([channel, status, createdAt])
 }
 
 model Group {
@@ -25,6 +45,7 @@ model Group {
   teacher   String?
   schedule  String?
   maxStudents Int?
+  telegramChatId String?
   createdAt DateTime  @default(now())
 
   @@index([adminId])
@@ -53,6 +74,10 @@ model Parent {
   fullName  String
   email     String?
   phone     String?
+  botStatus String    @default("CONNECTED")
+  botDisconnectedAt DateTime?
+  botLastCheckedAt DateTime?
+  botLastError String?
   createdAt DateTime  @default(now())
 
   @@index([adminId])

@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAdminIdFromRequest } from '@/lib/utils/adminScope'
-import { buildParentPortalUrl, buildTelegramBotChatUrl, formatTelegramDate, notifyParentsByStudentId } from '@/lib/telegram'
-import { notifyParentsByStudentIdSms } from '@/lib/sms'
+import { buildParentPortalUrl, buildTelegramBotChatUrl, formatTelegramDate } from '@/lib/telegram'
+import { sendAttendanceNotification, sendHybridNotification } from '@/lib/notifications'
 
-async function resolveStudentId(input: { studentId?: string | number; studentName?: string }) {
+async function resolveStudentId(input: { studentId?: string | number; studentName?: string; adminId?: number | null }) {
   if (input.studentId !== undefined && input.studentId !== null && String(input.studentId).trim() !== '') {
     const parsed = Number(input.studentId)
     return Number.isNaN(parsed) ? undefined : parsed
   }
 
   if (input.studentName) {
-    const student = await prisma.student.findFirst({ where: { fullName: input.studentName } })
+    const student = await prisma.student.findFirst({
+      where: {
+        fullName: input.studentName,
+        ...(input.adminId ? { adminId: Number(input.adminId) } : {}),
+      }
+    })
     return student ? Number(student.id) : undefined
   }
 
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Kechikish sababi (comment) majburiy' }, { status: 400 })
     }
 
-    const studentId = await resolveStudentId(body)
+    const studentId = await resolveStudentId({ ...body, adminId })
     const parsedDate = body.date ? new Date(body.date) : new Date()
     const data = {
       adminId,
@@ -70,6 +75,17 @@ export async function POST(request: Request) {
     if (studentId) {
       const student = await prisma.student.findUnique({ where: { id: studentId }, select: { fullName: true } })
       const studentName = student?.fullName || body.studentName || 'O\'quvchi'
+
+      if (status === 'absent') {
+        await sendAttendanceNotification({
+          adminId,
+          studentId,
+          studentName,
+        })
+
+        return NextResponse.json(attendance)
+      }
+
       const dateText = formatTelegramDate(parsedDate)
       const statusMap: Record<string, { emoji: string; label: string; title: string; text: string }> = {
         present: {
@@ -104,24 +120,20 @@ export async function POST(request: Request) {
       const buttonUrl = buildParentPortalUrl()
       const botChatUrl = buildTelegramBotChatUrl()
 
-      await Promise.allSettled([
-        notifyParentsByStudentId({
-          adminId,
-          studentId,
-          text,
+      await sendHybridNotification({
+        adminId,
+        studentId,
+        type: 'attendance',
+        telegramText: text,
+        smsText,
+        telegramOptions: {
           buttonText: "Batafsil ko'rish",
           buttonUrl,
-          aiButtonText: '🤖 SUNIY INTELLEKT JAVOBI',
-          aiButtonUrl: botChatUrl || undefined,
-          botButtonText: "Kevin's Academy bot",
+          botButtonText: '❓ SAVOL UCHUN KEVIN BOT',
           botButtonUrl: botChatUrl || undefined,
-        }),
-        notifyParentsByStudentIdSms({
-          adminId,
-          studentId,
-          text: smsText,
-        })
-      ])
+          modeButtons: true,
+        }
+      })
     }
 
     return NextResponse.json(attendance)
@@ -145,7 +157,7 @@ export async function PUT(request: Request) {
       if (!owned) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 })
     }
 
-    const studentId = await resolveStudentId(body)
+    const studentId = await resolveStudentId({ ...body, adminId })
     const parsedDate = body.date ? new Date(body.date) : undefined
     const status = body.status || undefined
     const note = typeof body.note === 'string' ? body.note.trim() : undefined

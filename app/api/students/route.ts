@@ -20,11 +20,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
     const adminId = getAdminIdFromRequest(req)
+    const fallbackEmail = `student_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@local.test`
     const student = await prisma.student.create({
       data: {
         adminId,
         fullName: body.fullName || body.name || '',
-        email: body.email || `${Date.now()}@test.com`,
+        email: body.email || fallbackEmail,
         phone: body.phone || '',
         username: body.username || `user_${Date.now()}`,
         password: body.password || '123456',
@@ -81,9 +82,15 @@ export async function PUT(req: Request) {
     const updated = await prisma.student.update({
       where: { id: studentId },
       data: {
+        ...(updateData.adminId !== undefined && updateData.adminId !== null && String(updateData.adminId).trim() !== ''
+          ? { adminId: Number(updateData.adminId) }
+          : {}),
         fullName: updateData.fullName || updateData.name,
         email: updateData.email,
         phone: updateData.phone || '',
+        ...(updateData.group !== undefined
+          ? { group: String(updateData.group || '').trim() || null }
+          : {}),
         username: updateData.username,
         status: updateData.status,
         // Faqat parol yuborilsa yangilaymiz

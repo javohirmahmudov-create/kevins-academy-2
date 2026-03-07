@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     const adminId = getAdminIdFromRequest(request)
     const materials = await prisma.material.findMany({
-      where: adminId ? { adminId } : undefined,
+      where: adminId ? { adminId, group: { not: '__certificate__' } } : { group: { not: '__certificate__' } },
       orderBy: { createdAt: 'desc' }
     })
     return NextResponse.json(materials)

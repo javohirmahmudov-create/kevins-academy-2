@@ -6,18 +6,9 @@ import { useApp } from '@/lib/app-context';
 export const ThemeToggle = () => {
   const { theme, toggleTheme } = useApp();
 
-  const handleToggle = () => {
-    console.log('Theme toggle clicked, current theme:', theme);
-    toggleTheme();
-
-    // Force re-render by triggering a state change in parent
-    // This will be caught by useEffect in the parent component
-    window.dispatchEvent(new CustomEvent('themeChanged'));
-  };
-
   return (
     <button
-      onClick={handleToggle}
+      onClick={toggleTheme}
       className={`p-2 rounded-lg transition-colors ${
         theme === 'light'
           ? 'bg-gray-100 hover:bg-gray-200 text-gray-600'

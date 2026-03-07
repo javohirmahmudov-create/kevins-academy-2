@@ -1,0 +1,588 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client"
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Brain, Mic, RefreshCw, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
+import { useApp } from '@/lib/app-context'
+
+type QuizItem = {
+  wordId: string
+  promptUz: string
+}
+
+type FlashcardItem = {
+  wordId: string
+  promptUz: string
+  answerEn: string
+  mastered: boolean
+  due: boolean
+  nextReviewAt: string
+}
+
+export default function StudentVocabularyPage() {
+  const router = useRouter()
+  const { currentStudent } = useApp()
+
+  const [student, setStudent] = useState<any>(null)
+  const [tab, setTab] = useState<'proctor' | 'peer' | 'flashcards'>('proctor')
+
+  const [loading, setLoading] = useState(false)
+  const [quiz, setQuiz] = useState<QuizItem[]>([])
+  const [flashcards, setFlashcards] = useState<FlashcardItem[]>([])
+  const [stats, setStats] = useState({ totalWords: 0, masteredWords: 0, dueWords: 0 })
+
+  const [timeLimitSeconds, setTimeLimitSeconds] = useState(8)
+  const [quizRunning, setQuizRunning] = useState(false)
+  const [quizIndex, setQuizIndex] = useState(0)
+  const [answerText, setAnswerText] = useState('')
+  const [result, setResult] = useState<any>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [quizError, setQuizError] = useState('')
+
+  const [flashcardIndex, setFlashcardIndex] = useState(0)
+  const [showAnswer, setShowAnswer] = useState(false)
+
+  const [pairLoading, setPairLoading] = useState(false)
+  const [pairPartner, setPairPartner] = useState<any>(null)
+  const [peerScore, setPeerScore] = useState(80)
+  const [peerNote, setPeerNote] = useState('')
+  const [peerRecordingUrl, setPeerRecordingUrl] = useState('')
+  const [peerSubmitting, setPeerSubmitting] = useState(false)
+
+  const [recordingFile, setRecordingFile] = useState<File | null>(null)
+  const [uploadingRecording, setUploadingRecording] = useState(false)
+
+  const questionStartedAtRef = useRef(0)
+  const questionTimeoutRef = useRef<any>(null)
+  const responsesRef = useRef<Array<{ wordId: string; answer: string; elapsedMs: number }>>([])
+  const recognitionRef = useRef<any>(null)
+  const [nowTick, setNowTick] = useState(Date.now())
+
+  useEffect(() => {
+    if (currentStudent) {
+      setStudent(currentStudent)
+      return
+    }
+
+    const raw = localStorage.getItem('currentStudent')
+    if (!raw) {
+      router.replace('/')
+      return
+    }
+
+    try {
+      setStudent(JSON.parse(raw))
+    } catch {
+      router.replace('/')
+    }
+  }, [currentStudent, router])
+
+  const loadSession = useCallback(async () => {
+    if (!student?.id) return
+    setLoading(true)
+    setQuizError('')
+    try {
+      const res = await fetch(`/api/vocabulary/proctor/session?studentId=${encodeURIComponent(String(student.id))}&size=10`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(String(data?.error || 'Yuklashda xatolik'))
+
+      setQuiz(Array.isArray(data?.quiz) ? data.quiz : [])
+      setFlashcards(Array.isArray(data?.flashcards) ? data.flashcards : [])
+      setStats({
+        totalWords: Number(data?.stats?.totalWords || 0),
+        masteredWords: Number(data?.stats?.masteredWords || 0),
+        dueWords: Number(data?.stats?.dueWords || 0),
+      })
+      if (data?.message) {
+        setQuizError(String(data.message))
+      }
+      setResult(null)
+      setQuizRunning(false)
+      responsesRef.current = []
+      setQuizIndex(0)
+      setAnswerText('')
+      setFlashcardIndex(0)
+      setShowAnswer(false)
+    } catch (error: any) {
+      setQuizError(String(error?.message || 'Yuklashda xatolik'))
+    } finally {
+      setLoading(false)
+    }
+  }, [student?.id])
+
+  const loadPairing = useCallback(async () => {
+    if (!student?.id || !student?.group) return
+    setPairLoading(true)
+    try {
+      const response = await fetch(`/api/vocabulary/peer/pairs?group=${encodeURIComponent(String(student.group))}&studentId=${encodeURIComponent(String(student.id))}`)
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Pairing xatoligi'))
+      setPairPartner(payload?.myPartner || null)
+    } catch {
+      setPairPartner(null)
+    } finally {
+      setPairLoading(false)
+    }
+  }, [student?.group, student?.id])
+
+  useEffect(() => {
+    if (!student?.id) return
+    loadSession()
+    loadPairing()
+  }, [student?.id, loadPairing, loadSession])
+
+  const currentQuizItem = quiz[quizIndex] || null
+
+  const startQuestionTimer = useCallback(() => {
+    if (!quizRunning || !currentQuizItem) return
+    if (questionTimeoutRef.current) {
+      clearTimeout(questionTimeoutRef.current)
+      questionTimeoutRef.current = null
+    }
+    questionStartedAtRef.current = Date.now()
+    questionTimeoutRef.current = setTimeout(() => {
+      if (!quizRunning) return
+      const elapsedMs = timeLimitSeconds * 1000 + 10
+      responsesRef.current.push({
+        wordId: String(currentQuizItem.wordId || ''),
+        answer: String(answerText || '').trim(),
+        elapsedMs,
+      })
+      setAnswerText('')
+      setQuizIndex((prev) => prev + 1)
+    }, timeLimitSeconds * 1000)
+  }, [answerText, currentQuizItem, quizRunning, timeLimitSeconds])
+
+  useEffect(() => {
+    if (!quizRunning || !currentQuizItem) return
+    startQuestionTimer()
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(currentQuizItem.promptUz)
+      utterance.lang = 'uz-UZ'
+      utterance.rate = 0.95
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utterance)
+    }
+
+    return () => {
+      if (questionTimeoutRef.current) {
+        clearTimeout(questionTimeoutRef.current)
+        questionTimeoutRef.current = null
+      }
+    }
+  }, [currentQuizItem, quizRunning, startQuestionTimer])
+
+  useEffect(() => {
+    if (!quizRunning) return
+    const interval = setInterval(() => setNowTick(Date.now()), 250)
+    return () => clearInterval(interval)
+  }, [quizRunning])
+
+  useEffect(() => {
+    if (!quizRunning) return
+    if (quizIndex < quiz.length) return
+
+    const submit = async () => {
+      setSubmitting(true)
+      try {
+        const response = await fetch('/api/vocabulary/proctor/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: student?.id,
+            answers: responsesRef.current,
+            timeLimitSeconds,
+          }),
+        })
+        const payload = await response.json()
+        if (!response.ok) throw new Error(String(payload?.error || 'Yuborishda xatolik'))
+        setResult(payload)
+        setQuizRunning(false)
+        await loadSession()
+      } catch (error: any) {
+        setQuizError(String(error?.message || 'Yuborishda xatolik'))
+        setQuizRunning(false)
+      } finally {
+        setSubmitting(false)
+      }
+    }
+
+    submit()
+  }, [quiz.length, quizIndex, quizRunning, student?.id, timeLimitSeconds, loadSession])
+
+  useEffect(() => {
+    return () => {
+      if (questionTimeoutRef.current) clearTimeout(questionTimeoutRef.current)
+      if (recognitionRef.current && typeof recognitionRef.current.stop === 'function') {
+        recognitionRef.current.stop()
+      }
+    }
+  }, [])
+
+  const secondsLeft = useMemo(() => {
+    if (!quizRunning || !currentQuizItem || !questionStartedAtRef.current) return timeLimitSeconds
+    const elapsed = nowTick - questionStartedAtRef.current
+    return Math.max(0, Math.ceil((timeLimitSeconds * 1000 - elapsed) / 1000))
+  }, [currentQuizItem, nowTick, quizRunning, timeLimitSeconds])
+
+  const startQuiz = () => {
+    if (!quiz.length) return
+    responsesRef.current = []
+    setResult(null)
+    setQuizError('')
+    setQuizRunning(true)
+    setQuizIndex(0)
+    setAnswerText('')
+  }
+
+  const submitCurrentAnswer = () => {
+    if (!quizRunning || !currentQuizItem) return
+    if (questionTimeoutRef.current) {
+      clearTimeout(questionTimeoutRef.current)
+      questionTimeoutRef.current = null
+    }
+    const elapsedMs = Math.max(0, Date.now() - questionStartedAtRef.current)
+    responsesRef.current.push({
+      wordId: String(currentQuizItem.wordId || ''),
+      answer: String(answerText || '').trim(),
+      elapsedMs,
+    })
+    setAnswerText('')
+    setQuizIndex((prev) => prev + 1)
+  }
+
+  const startVoiceInput = () => {
+    if (typeof window === 'undefined') return
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Brauzeringizda voice recognition yo‘q')
+      return
+    }
+
+    try {
+      if (recognitionRef.current && typeof recognitionRef.current.stop === 'function') {
+        recognitionRef.current.stop()
+      }
+
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'en-US'
+      recognition.interimResults = false
+      recognition.maxAlternatives = 1
+      recognition.onresult = (event: any) => {
+        const transcript = event?.results?.[0]?.[0]?.transcript || ''
+        setAnswerText(String(transcript).trim())
+      }
+      recognition.onerror = () => {
+        // no-op
+      }
+      recognitionRef.current = recognition
+      recognition.start()
+    } catch {
+      // ignore
+    }
+  }
+
+  const currentFlashcard = flashcards[flashcardIndex] || null
+
+  const uploadRecording = async () => {
+    if (!recordingFile || !student?.group) return
+    setUploadingRecording(true)
+    try {
+      const form = new FormData()
+      form.append('title', `PEER_RECORDING:${student.id}:${Date.now()}`)
+      form.append('group', '__peer_recordings__')
+      form.append('type', 'video')
+      form.append('file', recordingFile)
+      form.append('content', `Group: ${student.group}`)
+
+      const response = await fetch('/api/materials', {
+        method: 'POST',
+        headers: student?.adminId ? { 'x-admin-id': String(student.adminId) } : undefined,
+        body: form,
+      })
+
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Video yuklanmadi'))
+      setPeerRecordingUrl(String(payload?.fileUrl || ''))
+      alert('Video yuklandi ✅')
+    } catch (error: any) {
+      alert(String(error?.message || 'Video yuklanmadi'))
+    } finally {
+      setUploadingRecording(false)
+    }
+  }
+
+  const submitPeerResult = async () => {
+    if (!student?.id || !pairPartner?.id) {
+      alert('Juft topilmadi')
+      return
+    }
+
+    setPeerSubmitting(true)
+    try {
+      const response = await fetch('/api/vocabulary/peer/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: student.id,
+          partnerId: pairPartner.id,
+          score: peerScore,
+          note: peerNote,
+          recordingUrl: peerRecordingUrl || undefined,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(String(payload?.error || 'Jo‘natishda xatolik'))
+      alert('Natija yuborildi. Endi admin tasdiqlaydi ✅')
+      setPeerNote('')
+    } catch (error: any) {
+      alert(String(error?.message || 'Jo‘natishda xatolik'))
+    } finally {
+      setPeerSubmitting(false)
+    }
+  }
+
+  if (!student) return null
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <button
+            onClick={() => router.push('/student')}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-200"
+          >
+            <ArrowLeft className="w-4 h-4" /> Orqaga
+          </button>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white inline-flex items-center gap-2">
+            <Brain className="w-5 h-5 text-indigo-500" /> AI Vocabulary Proctor
+          </h1>
+          <button
+            onClick={loadSession}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 text-indigo-700 dark:text-indigo-300 px-3 py-2 text-sm"
+          >
+            <RefreshCw className="w-4 h-4" /> Yangilash
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-2xl border border-blue-100 bg-white dark:bg-gray-900 dark:border-gray-800 p-4">
+            <p className="text-xs text-gray-500">Total words</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalWords}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-white dark:bg-gray-900 dark:border-gray-800 p-4">
+            <p className="text-xs text-gray-500">Mastered</p>
+            <p className="text-2xl font-bold text-emerald-600">{stats.masteredWords}</p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-white dark:bg-gray-900 dark:border-gray-800 p-4">
+            <p className="text-xs text-gray-500">Due now</p>
+            <p className="text-2xl font-bold text-amber-600">{stats.dueWords}</p>
+          </div>
+        </div>
+
+        <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-1">
+          <button onClick={() => setTab('proctor')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'proctor' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>AI Proctor</button>
+          <button onClick={() => setTab('peer')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'peer' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Peer Checking</button>
+          <button onClick={() => setTab('flashcards')} className={`px-4 py-2 rounded-lg text-sm ${tab === 'flashcards' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300'}`}>Flashcards</button>
+        </div>
+
+        {tab === 'proctor' && (
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-sm text-gray-500">Har bir so‘zga vaqt chegarasi</p>
+                <select
+                  value={timeLimitSeconds}
+                  onChange={(event) => setTimeLimitSeconds(Number(event.target.value || 8))}
+                  className="mt-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent px-3 py-2 text-sm"
+                  disabled={quizRunning}
+                >
+                  <option value={5}>5 soniya</option>
+                  <option value={8}>8 soniya</option>
+                  <option value={10}>10 soniya</option>
+                </select>
+              </div>
+              {!quizRunning ? (
+                <button
+                  onClick={startQuiz}
+                  disabled={loading || quiz.length === 0}
+                  className="rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  Quizni boshlash
+                </button>
+              ) : (
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Word {Math.min(quizIndex + 1, quiz.length)} / {quiz.length}</p>
+                  <p className="text-xl font-bold text-red-500">{secondsLeft}s</p>
+                </div>
+              )}
+            </div>
+
+            {quizError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-3 py-2 text-sm">{quizError}</div>
+            ) : null}
+
+            {quizRunning && currentQuizItem ? (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/30 p-5 space-y-4">
+                <p className="text-sm text-gray-500">Uzbek prompt</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{currentQuizItem.promptUz}</p>
+
+                <div className="flex gap-2">
+                  <input
+                    value={answerText}
+                    onChange={(event) => setAnswerText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        submitCurrentAnswer()
+                      }
+                    }}
+                    className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2"
+                    placeholder="Inglizcha javob..."
+                  />
+                  <button onClick={startVoiceInput} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3">
+                    <Mic className="w-4 h-4" />
+                  </button>
+                  <button onClick={submitCurrentAnswer} className="rounded-lg bg-indigo-600 text-white px-4">
+                    Next
+                  </button>
+                </div>
+              </motion.div>
+            ) : null}
+
+            {submitting ? <p className="text-sm text-gray-500">Natija hisoblanmoqda...</p> : null}
+
+            {result?.result ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 p-4">
+                <p className="font-semibold">Natija: {result.result.correctCount}/{result.result.total} ({result.result.percent}%)</p>
+                <p className="text-sm">Ball avtomatik ravishda Scores bo‘limiga yozildi.</p>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {tab === 'peer' && (
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white inline-flex items-center gap-2"><Users className="w-5 h-5 text-indigo-500" /> Peer-to-Peer Checking</h2>
+              <button onClick={loadPairing} className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm">Random juftlik</button>
+            </div>
+
+            {pairLoading ? <p className="text-sm text-gray-500">Juftlik yuklanmoqda...</p> : null}
+            {!pairLoading && !pairPartner ? <p className="text-sm text-amber-600">Juft topilmadi. Guruhingizda kamida 2 ta student bo‘lishi kerak.</p> : null}
+            {pairPartner ? (
+              <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 p-4 space-y-3">
+                <p className="text-sm text-gray-500">Sizning juftingiz</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">{pairPartner.fullName}</p>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-600 dark:text-gray-300">Video recording (upload)</label>
+                  <div className="flex gap-2 flex-wrap">
+                    <input type="file" accept="video/*" onChange={(event) => setRecordingFile(event.target.files?.[0] || null)} className="text-sm" />
+                    <button
+                      onClick={uploadRecording}
+                      disabled={!recordingFile || uploadingRecording}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                    >
+                      <Upload className="w-4 h-4" /> {uploadingRecording ? 'Yuklanmoqda...' : 'Yuklash'}
+                    </button>
+                  </div>
+                  {peerRecordingUrl ? (
+                    <a href={peerRecordingUrl} target="_blank" rel="noreferrer" className="text-sm text-indigo-600 inline-flex items-center gap-1 hover:underline">
+                      <Video className="w-4 h-4" /> Recording link
+                    </a>
+                  ) : null}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-300">Juftingizga qo‘yadigan ball (0-100)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={peerScore}
+                      onChange={(event) => setPeerScore(Math.max(0, Math.min(100, Number(event.target.value || 0))))}
+                      className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-300">Izoh</label>
+                    <input
+                      value={peerNote}
+                      onChange={(event) => setPeerNote(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent px-3 py-2"
+                      placeholder="Qisqa izoh"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={submitPeerResult}
+                  disabled={peerSubmitting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> {peerSubmitting ? 'Yuborilmoqda...' : 'Natijani yuborish'}
+                </button>
+              </div>
+            ) : null}
+          </section>
+        )}
+
+        {tab === 'flashcards' && (
+          <section className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 space-y-4">
+            {!currentFlashcard ? (
+              <p className="text-sm text-gray-500">Flashcards topilmadi.</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-500">{flashcardIndex + 1} / {flashcards.length}</p>
+                  <p className={`text-xs px-2 py-1 rounded-full ${currentFlashcard.mastered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {currentFlashcard.mastered ? 'Mastered' : currentFlashcard.due ? 'Due now' : 'Learning'}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 p-6 text-center space-y-3">
+                  <p className="text-sm text-gray-500">Prompt (UZ)</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{currentFlashcard.promptUz}</p>
+                  {showAnswer ? <p className="text-xl font-semibold text-indigo-600">{currentFlashcard.answerEn}</p> : null}
+                  <button onClick={() => setShowAnswer((prev) => !prev)} className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-1.5 text-sm">
+                    {showAnswer ? 'Javobni yashirish' : 'Javobni ko‘rsatish'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setFlashcardIndex((prev) => Math.max(0, prev - 1))
+                      setShowAnswer(false)
+                    }}
+                    disabled={flashcardIndex === 0}
+                    className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    Oldingi
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFlashcardIndex((prev) => Math.min(flashcards.length - 1, prev + 1))
+                      setShowAnswer(false)
+                    }}
+                    disabled={flashcardIndex >= flashcards.length - 1}
+                    className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    Keyingi
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+      </main>
+    </div>
+  )
+}

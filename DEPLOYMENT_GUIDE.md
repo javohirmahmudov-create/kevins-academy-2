@@ -69,8 +69,8 @@ getAdminByUsername(username)  // Calls getAdmins() → filters by username
 
 ## 🔄 Database Migration Steps
 
-> **Important:** Vercel build now intentionally skips Prisma migrations for reliability.  
-> Run migrations explicitly via CLI/CI before or after deployment using `npm run migrate:deploy`.
+> **Important:** Vercel production build now runs Prisma migrations automatically.
+> The build script executes: `prisma generate` → `prisma migrate deploy` → `next build`.
 
 ### Step 1: Add DATABASE_URL to Vercel
 
@@ -85,9 +85,10 @@ getAdminByUsername(username)  // Calls getAdmins() → filters by username
 7. Click **Add**
 8. **Redeploy** your project (it should auto-redeploy or manually trigger)
 
-### Step 2: Run Prisma Commands Locally
+### Step 2: Optional Local Prisma Commands
 
-After DATABASE_URL is set on Vercel, execute from your terminal:
+After DATABASE_URL is set on Vercel, deployment will apply migrations automatically.
+Use these commands locally when you need manual verification:
 
 ```bash
 # 1. Generate Prisma Client (auto-run on install, but good to be explicit)

@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { unpackParent } from '@/lib/utils/parentAuth'
+import { sendEskizSms } from '@/lib/eskiz'
 
 type SendSmsInput = {
   to: string
@@ -10,15 +11,6 @@ type NotifyParentsSmsInput = {
   adminId?: number | null
   studentId?: number | null
   text: string
-}
-
-function getTwilioConfig() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID || ''
-  const authToken = process.env.TWILIO_AUTH_TOKEN || ''
-  const from = process.env.TWILIO_FROM_NUMBER || ''
-
-  if (!accountSid || !authToken || !from) return null
-  return { accountSid, authToken, from }
 }
 
 function normalizePhoneForSms(phone?: string | null) {
@@ -35,67 +27,48 @@ function normalizePhoneForSms(phone?: string | null) {
 }
 
 export async function sendSms(input: SendSmsInput) {
-  const config = getTwilioConfig()
-  if (!config) {
-    return { ok: false as const, reason: 'missing_sms_config' }
-  }
-
   const to = normalizePhoneForSms(input.to)
   if (!to) {
     return { ok: false as const, reason: 'invalid_phone' }
   }
 
-  try {
-    const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${config.accountSid}/Messages.json`
-    const auth = Buffer.from(`${config.accountSid}:${config.authToken}`).toString('base64')
-    const body = new URLSearchParams({
-      To: to,
-      From: config.from,
-      Body: input.text,
-    })
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
-    })
-
-    if (!response.ok) {
-      const raw = await response.text()
-      console.error('SMS send failed:', raw)
-      return { ok: false as const, reason: 'send_failed' }
-    }
-
-    return { ok: true as const }
-  } catch (error) {
-    console.error('SMS send error:', error)
-    return { ok: false as const, reason: 'send_error' }
+  const result = await sendEskizSms(to, input.text)
+  if (!result.ok) {
+    console.error('SMS send failed:', result)
   }
+  return result
 }
 
 export async function findLinkedParentPhones(input: { adminId?: number | null; studentId?: number | null }) {
   if (!input.studentId) return [] as string[]
 
-  const parents = await prisma.parent.findMany({
+  const collectPhonesFromParents = (parents: any[]) => {
+    const phones = new Set<string>()
+
+    for (const parent of parents) {
+      const unpacked = unpackParent(parent) as any
+      const linkedStudentId = unpacked?.studentId ? Number(unpacked.studentId) : null
+      const phone = normalizePhoneForSms(unpacked?.phone || parent.phone)
+      if (linkedStudentId === input.studentId && phone) {
+        phones.add(phone)
+      }
+    }
+
+    return Array.from(phones)
+  }
+
+  let parents = await prisma.parent.findMany({
     where: input.adminId ? { adminId: input.adminId } : undefined,
     orderBy: { createdAt: 'desc' }
   })
 
-  const phones = new Set<string>()
-
-  for (const parent of parents) {
-    const unpacked = unpackParent(parent) as any
-    const linkedStudentId = unpacked?.studentId ? Number(unpacked.studentId) : null
-    const phone = normalizePhoneForSms(unpacked?.phone || parent.phone)
-    if (linkedStudentId === input.studentId && phone) {
-      phones.add(phone)
-    }
+  const scopedPhones = collectPhonesFromParents(parents)
+  if (scopedPhones.length > 0 || !input.adminId) {
+    return scopedPhones
   }
 
-  return Array.from(phones)
+  parents = await prisma.parent.findMany({ orderBy: { createdAt: 'desc' } })
+  return collectPhonesFromParents(parents)
 }
 
 export async function notifyParentsByStudentIdSms(input: NotifyParentsSmsInput) {

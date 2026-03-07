@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Parent"
+ADD COLUMN "botStatus" TEXT NOT NULL DEFAULT 'CONNECTED',
+ADD COLUMN "botDisconnectedAt" TIMESTAMP(3),
+ADD COLUMN "botLastCheckedAt" TIMESTAMP(3),
+ADD COLUMN "botLastError" TEXT;

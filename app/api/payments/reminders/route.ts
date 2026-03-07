@@ -1,23 +1,35 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { formatTelegramDate, notifyParentsByStudentId, queueTelegramTask } from '@/lib/telegram'
-import { notifyParentsByStudentIdSms, queueSmsTask } from '@/lib/sms'
+import { formatTelegramDate } from '@/lib/telegram'
+import { sendHybridNotification } from '@/lib/notifications'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const dailyCache = new Map<string, number>()
 const DEFAULT_CARD_NUMBER = '9860 3501 4447 3575'
 const DEFAULT_CARD_EXPIRES = '08/30'
+const DEFAULT_BUSINESS_TIMEZONE = process.env.BUSINESS_TIMEZONE || 'Asia/Tashkent'
 
-function startOfLocalDay(date: Date) {
-  const local = new Date(date)
-  local.setHours(0, 0, 0, 0)
-  return local
+function getDatePartsInTimezone(date: Date, timezone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
+  const parts = formatter.formatToParts(date)
+  const year = Number(parts.find((part) => part.type === 'year')?.value || 0)
+  const month = Number(parts.find((part) => part.type === 'month')?.value || 0)
+  const day = Number(parts.find((part) => part.type === 'day')?.value || 0)
+  return { year, month, day }
 }
 
 function daysBetweenLocalDates(laterDate: Date, earlierDate: Date) {
-  const later = startOfLocalDay(laterDate)
-  const earlier = startOfLocalDay(earlierDate)
-  return Math.round((later.getTime() - earlier.getTime()) / DAY_MS)
+  const later = getDatePartsInTimezone(laterDate, DEFAULT_BUSINESS_TIMEZONE)
+  const earlier = getDatePartsInTimezone(earlierDate, DEFAULT_BUSINESS_TIMEZONE)
+  const laterUtcDay = Date.UTC(later.year, later.month - 1, later.day)
+  const earlierUtcDay = Date.UTC(earlier.year, earlier.month - 1, earlier.day)
+  return Math.round((laterUtcDay - earlierUtcDay) / DAY_MS)
 }
 
 function buildCardPaymentUrl(origin?: string) {
@@ -65,8 +77,8 @@ function calculatePenalty(input: {
     }
   }
 
-  const overdueDays = Math.max(0, daysBetweenLocalDates(now, endDate))
-  if (overdueDays <= 0) {
+  const overdueDayDiff = Math.max(0, daysBetweenLocalDates(now, endDate))
+  if (overdueDayDiff <= 0) {
     return {
       overdueDays: 0,
       penaltyAmount: 0,
@@ -74,6 +86,8 @@ function calculatePenalty(input: {
       isOverdue: false,
     }
   }
+
+  const overdueDays = overdueDayDiff + 1
 
   const penaltyAmount = overdueDays * penaltyPerDay
   const totalDue = amount + penaltyAmount
@@ -149,23 +163,19 @@ export async function GET(request: Request) {
       const text = `🚨 <b>Kunlik to'lov eslatmasi</b>\n\n📅 To'lov muddati: <b>${dueText}</b>\n⏳ Kechikish: <b>${calc.overdueDays} kun</b>\n💸 Jami to'lov: <b>${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm</b>\n\nIltimos, to'lovni imkon qadar tezroq amalga oshiring.`
       const smsText = `Kevin's Academy: Kunlik eslatma. To'lov muddati o'tgan (${calc.overdueDays} kun). Jami: ${Number(calc.totalDue).toLocaleString('uz-UZ')} so'm. Karta: ${getCardInfoText()}.`
 
-      queueTelegramTask(async () => {
-        await notifyParentsByStudentId({
-          adminId: payment.adminId,
-          studentId: payment.studentId,
-          text,
+      await sendHybridNotification({
+        adminId: payment.adminId,
+        studentId: payment.studentId,
+        type: 'payment',
+        telegramText: text,
+        smsText,
+        telegramOptions: {
           buttonText: "💳 Karta orqali to'lash",
           buttonUrl,
+          copyCardButtonText: '📋 Kartani nusxalash',
+          copyCardCallbackData: 'copy_card_details',
           modeButtons: false,
-        })
-      })
-
-      queueSmsTask(async () => {
-        await notifyParentsByStudentIdSms({
-          adminId: payment.adminId,
-          studentId: payment.studentId,
-          text: smsText,
-        })
+        }
       })
 
       sent += 1

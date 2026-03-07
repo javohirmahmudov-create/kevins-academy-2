@@ -2,6 +2,16 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // Turlar (Types)
 export type AuthRole = 'admin' | 'student' | 'parent';
 
@@ -289,6 +299,43 @@ const translations = {
     'no_ranking_data': 'Reyting ma\'lumotlari hali yo\'q',
     'fullscreen': 'To\'liq ekran',
     'open_video': 'Videoni ochish',
+    'my_scores': 'Mening ballarim',
+    'my_attendance': 'Mening davomatim',
+    'viewing_as_student': 'Siz student sifatida ko\'ryapsiz.',
+    'logout_to_admin_hint': 'Admin panelga qaytish uchun student portalidan chiqing.',
+    'dismiss': 'Yopish',
+    'welcome_back': 'Xush kelibsiz',
+    'review_lessons_scores': 'Quyida darslar va ballaringizni ko\'rib chiqing.',
+    'average_score': 'O\'rtacha ball',
+    'latest_overall_performance': 'So\'nggi umumiy natija',
+    'keep_practicing': 'Natijangizni oshirish uchun muntazam mashq qiling.',
+    'skill_breakdown': 'Ko\'nikmalar kesimi',
+    'no_scores_recorded': 'Hali ball kiritilmagan.',
+    'group_weekly_rank': 'Guruh bo\'yicha haftalik o\'rin',
+    'group_mock_rank': 'Guruh bo\'yicha mock o\'rin',
+    'students_in_group': 'Guruhdagi o\'quvchilar soni',
+    'navigation': 'Navigatsiya',
+    'view_materials_teacher': 'Ustoz yuklagan materiallarni ko\'rish.',
+    'track_detailed_scores': 'Batafsil ball tarixingizni kuzatish.',
+    'overall_average': 'Umumiy o\'rtacha',
+    'keep_up_great_work': 'Ajoyib davom eting!',
+    'no_scores_yet': 'Hali ball yo\'q',
+    'teacher_no_scores_yet': 'Ustoz siz uchun hali ball kiritmagan.',
+    'score': 'Ball',
+    'weekly': 'HAFTALIK',
+    'mock_exam': 'MOCK IMTIHON',
+    'beginner': 'boshlang\'ich',
+    'no_materials_yet': 'Hali materiallar yo\'q',
+    'teacher_no_materials_group': 'Ustoz sizning guruhingiz uchun hali material yuklamagan.',
+    'rewind_10s': '<< 10s',
+    'forward_10s': '10s >>',
+    'no_attendance_records': 'Davomat yozuvlari mavjud emas',
+    'teacher_no_attendance_yet': 'Ustoz hali davomat belgilamagan.',
+    'unknown_date': 'Noma\'lum sana',
+    'pending_tasks': 'Kutilayotgan vazifalar',
+    'completed': 'Bajarilgan',
+    'no_homework_assigned': 'Uy vazifasi berilmagan',
+    'teacher_no_homework_yet': 'Ustoz hali uy vazifasi bermagan.',
     'score_comment_placeholder': 'Ball bo\'yicha izoh yozing',
   },
   en: {
@@ -528,6 +575,43 @@ const translations = {
     'no_ranking_data': 'No ranking data yet',
     'fullscreen': 'Fullscreen',
     'open_video': 'Open Video',
+    'my_scores': 'My Scores',
+    'my_attendance': 'My Attendance',
+    'viewing_as_student': 'You are viewing as a student.',
+    'logout_to_admin_hint': 'Log out from student portal to return to admin dashboard.',
+    'dismiss': 'Dismiss',
+    'welcome_back': 'Welcome back',
+    'review_lessons_scores': 'Review your lessons and scores below.',
+    'average_score': 'Average Score',
+    'latest_overall_performance': 'Latest overall performance',
+    'keep_practicing': 'Keep practicing to improve your results.',
+    'skill_breakdown': 'Skill Breakdown',
+    'no_scores_recorded': 'No scores recorded yet.',
+    'group_weekly_rank': 'Group Weekly Rank',
+    'group_mock_rank': 'Group Mock Rank',
+    'students_in_group': 'Students in Group',
+    'navigation': 'Navigation',
+    'view_materials_teacher': 'View materials shared by your teacher.',
+    'track_detailed_scores': 'Track your detailed score history.',
+    'overall_average': 'Overall Average',
+    'keep_up_great_work': 'Keep up the great work!',
+    'no_scores_yet': 'No scores yet',
+    'teacher_no_scores_yet': "Your teacher hasn't added any scores for you yet.",
+    'score': 'Score',
+    'weekly': 'WEEKLY',
+    'mock_exam': 'MOCK EXAM',
+    'beginner': 'beginner',
+    'no_materials_yet': 'No materials yet',
+    'teacher_no_materials_group': "Your teacher hasn't uploaded any materials for your group yet.",
+    'rewind_10s': '<< 10s',
+    'forward_10s': '10s >>',
+    'no_attendance_records': 'No attendance records',
+    'teacher_no_attendance_yet': "Your teacher hasn't marked any attendance yet.",
+    'unknown_date': 'Unknown Date',
+    'pending_tasks': 'Pending Tasks',
+    'completed': 'Completed',
+    'no_homework_assigned': 'No homework assigned',
+    'teacher_no_homework_yet': "Your teacher hasn't assigned any homework yet.",
     'score_comment_placeholder': 'Write a comment about this score',
   }
 };
@@ -588,16 +672,95 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     else document.documentElement.classList.remove('dark');
   }, [language, theme]);
 
+  const resolveNumericAdminId = (raw: unknown): number | null => {
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  };
+
+  const sendActivityPing = async (payload: {
+    role: 'student' | 'parent';
+    userId: string;
+    fullName: string;
+    adminId: number | null;
+    group?: string | null;
+    sessionId: string;
+    loginAt?: string;
+  }) => {
+    try {
+      await fetch('/api/activity/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // ignore activity ping failures
+    }
+  };
+
+  const sendActivityLogout = (payload: {
+    role: 'student' | 'parent';
+    userId: string;
+    fullName: string;
+    adminId: number | null;
+    group?: string | null;
+    sessionId: string;
+    loginAt?: string;
+  }) => {
+    try {
+      fetch('/api/activity/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      });
+    } catch {
+      // ignore activity logout failures
+    }
+  };
+
+  useEffect(() => {
+    const session = currentStudent
+      ? {
+          role: 'student' as const,
+          userId: String(currentStudent.id || ''),
+          fullName: String(currentStudent.fullName || "O'quvchi"),
+          adminId: resolveNumericAdminId(currentStudent.adminId),
+          group: currentStudent.group || null,
+          sessionId: String(currentStudent.activitySessionId || ''),
+          loginAt: String(currentStudent.activityLoginAt || ''),
+        }
+      : currentParent
+      ? {
+          role: 'parent' as const,
+          userId: String(currentParent.id || ''),
+          fullName: String(currentParent.fullName || 'Parent'),
+          adminId: resolveNumericAdminId(currentParent.adminId),
+          group: String(currentParent.activityGroup || currentParent.primaryStudentGroup || '').trim() || null,
+          sessionId: String(currentParent.activitySessionId || ''),
+          loginAt: String(currentParent.activityLoginAt || ''),
+        }
+      : null;
+
+    if (!session || !session.userId || !session.sessionId) return;
+
+    sendActivityPing(session);
+    const timer = setInterval(() => {
+      sendActivityPing(session);
+    }, 60_000);
+
+    return () => clearInterval(timer);
+  }, [currentStudent, currentParent]);
+
   // --- AUTH LOGIKASI (API) ---
 
   const loginAdmin = async (username: string, password: string): Promise<boolean> => {
     // try API first; fall back to local storage if the endpoint is absent/404
     try {
-      const res = await fetch('/api/auth/admin', {
+      const res = await fetchWithTimeout('/api/auth/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
-      });
+      }, 12000);
       if (res.ok) {
         const admin = await res.json();
         setCurrentAdmin(admin);
@@ -641,16 +804,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const loginStudent = async (username: string, password: string, options?: { impersonate?: boolean }) => {
     try {
-      const res = await fetch('/api/auth/student', {
+      const res = await fetchWithTimeout('/api/auth/student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
-      });
+      }, 12000);
       const result = await res.json();
       if (res.ok) {
-        setCurrentStudent(result);
+        const enriched = {
+          ...result,
+          activitySessionId: result?.activitySessionId || crypto.randomUUID(),
+          activityLoginAt: result?.activityLoginAt || new Date().toISOString(),
+        };
+
+        setCurrentStudent(enriched);
         setIsStudentAuthenticated(true);
-        localStorage.setItem('currentStudent', JSON.stringify(result));
+        localStorage.setItem('currentStudent', JSON.stringify(enriched));
         if (options?.impersonate && isAdminAuthenticated) {
           setSessionState({ role: 'admin', viewedAs: 'student' });
           setImpersonationWarning(true);
@@ -664,6 +833,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logoutStudent = () => {
+    if (currentStudent?.id && currentStudent?.activitySessionId) {
+      sendActivityLogout({
+        role: 'student',
+        userId: String(currentStudent.id),
+        fullName: String(currentStudent.fullName || "O'quvchi"),
+        adminId: resolveNumericAdminId(currentStudent.adminId),
+        group: currentStudent.group || null,
+        sessionId: String(currentStudent.activitySessionId),
+        loginAt: String(currentStudent.activityLoginAt || ''),
+      });
+    }
     localStorage.removeItem('currentStudent');
     setCurrentStudent(null);
     setIsStudentAuthenticated(false);
@@ -672,16 +852,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const loginParent = async (username: string, password: string) => {
     try {
-      const res = await fetch('/api/auth/parent', {
+      const res = await fetchWithTimeout('/api/auth/parent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
-      });
+      }, 12000);
       const result = await res.json();
       if (res.ok) {
-        setCurrentParent(result);
+        const enriched = {
+          ...result,
+          activitySessionId: result?.activitySessionId || crypto.randomUUID(),
+          activityLoginAt: result?.activityLoginAt || new Date().toISOString(),
+        };
+
+        setCurrentParent(enriched);
         setIsParentAuthenticated(true);
-        localStorage.setItem('currentParent', JSON.stringify(result));
+        localStorage.setItem('currentParent', JSON.stringify(enriched));
         setSessionState({ role: 'parent' });
         return { success: true };
       }
@@ -690,6 +876,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logoutParent = () => {
+    if (currentParent?.id && currentParent?.activitySessionId) {
+      sendActivityLogout({
+        role: 'parent',
+        userId: String(currentParent.id),
+        fullName: String(currentParent.fullName || 'Parent'),
+        adminId: resolveNumericAdminId(currentParent.adminId),
+        group: String(currentParent.activityGroup || currentParent.primaryStudentGroup || '').trim() || null,
+        sessionId: String(currentParent.activitySessionId),
+        loginAt: String(currentParent.activityLoginAt || ''),
+      });
+    }
     localStorage.removeItem('currentParent');
     setCurrentParent(null);
     setIsParentAuthenticated(false);

@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { decodeParentMetadata, encodeParentMetadata, unpackParent } from '@/lib/utils/parentAuth'
-import { answerTelegramCallbackQuery, normalizePhoneForLinking, sendTelegramMessage, upsertTelegramPhoneLink } from '@/lib/telegram'
+import { answerTelegramCallbackQuery, normalizePhoneForLinking, sendTelegramContactCard, sendTelegramContactRequestMessage, sendTelegramMessage, updateParentBotStatusByChatId, upsertTelegramPhoneLink } from '@/lib/telegram'
 
 const AI_MIN_INTERVAL_MS = Number(process.env.TELEGRAM_AI_MIN_INTERVAL_MS || 3000)
 const AI_COOLDOWN_CACHE_LIMIT = 5000
 const aiRequestCooldownByChat = new Map<string, number>()
-const chatAssistantModeByChat = new Map<string, 'ai' | 'bot'>()
+const DEFAULT_CARD_NUMBER = '9860 3501 4447 3575'
 
 type StudentInsightSnapshot = {
   parentName: string
   studentName: string
   group: string
+  level: string
   attendanceRate: number
   latestScore: number
   weeklyRank: number
@@ -22,7 +23,35 @@ type StudentInsightSnapshot = {
   lateCount14d: number
   absentCount14d: number
   scoreTrend: 'up' | 'down' | 'stable'
-  skills: Array<{ key: string; label: string; score: number; maxScore: number; percent: number }>
+  skills: SkillInsight[]
+}
+
+type SkillInsight = {
+  key: string
+  label: string
+  score: number
+  maxScore: number
+  percent: number
+  comment?: string
+  selected?: boolean
+  weakestPart?: string
+  listeningParts?: Record<string, number>
+  readingParts?: Record<string, number>
+  task11?: number
+  task12?: number
+  task2?: number
+  cefrScore75?: number
+  levelDetected?: string
+  lexical?: number
+  speakingGrammar?: number
+  speakingPronunciation?: number
+  synonymBonus?: number
+  wordList?: string[]
+  sourceWordList?: string[]
+  sentenceStructure?: number
+  topicMastery?: number
+  toBeTenses?: number
+  spelling?: number
 }
 
 const SKILL_ALIASES: Record<string, string[]> = {
@@ -32,7 +61,7 @@ const SKILL_ALIASES: Record<string, string[]> = {
   writing: ['writing', 'yozish', 'yozma'],
   grammar: ['grammar', 'grammatika'],
   vocabulary: ['vocabulary', 'lug\'at', 'lugat', 'word'],
-  translation: ['translation', 'tarjima'],
+  translation: ['translation', 'tarjima', 'o\'qish matn', 'matn tarjimasi'],
   attendance: ['attendance', 'davomat'],
 }
 
@@ -45,6 +74,48 @@ const SKILL_LABEL: Record<string, string> = {
   vocabulary: 'Vocabulary',
   translation: 'Translation',
   attendance: 'Attendance',
+}
+
+function normalizeLevel(raw?: string | null) {
+  const value = String(raw || '').trim().toLowerCase()
+  if (value.includes('advanced')) return 'advanced'
+  if (value.includes('intermediate')) return 'intermediate'
+  if (value.includes('elementary')) return 'elementary'
+  return 'beginner'
+}
+
+function getSnapshotTrack(snapshot: StudentInsightSnapshot) {
+  const normalizedLevel = normalizeLevel(snapshot.level)
+  if (normalizedLevel === 'intermediate' || normalizedLevel === 'advanced') {
+    return 'intermediate' as const
+  }
+
+  const advancedSkillSet = ['listening', 'reading', 'writing', 'speaking']
+  const hasAdvancedSkills = advancedSkillSet.every((key) => snapshot.skills.some((item) => item.key === key))
+  return hasAdvancedSkills ? ('intermediate' as const) : ('beginner' as const)
+}
+
+function getWeakestSkill(snapshot: StudentInsightSnapshot) {
+  if (!snapshot.skills.length) return null
+  return [...snapshot.skills].sort((a, b) => a.percent - b.percent)[0]
+}
+
+function getSectionButtonsForTrack(track: 'beginner' | 'intermediate') {
+  if (track === 'intermediate') {
+    return [
+      { text: '🎧 Listening diagnostika', callbackData: 'kevin_section_listening' },
+      { text: '📚 Reading diagnostika', callbackData: 'kevin_section_reading' },
+      { text: '✍️ Writing diagnostika', callbackData: 'kevin_section_writing' },
+      { text: '🗣 Speaking diagnostika', callbackData: 'kevin_section_speaking' },
+    ]
+  }
+
+  return [
+    { text: '🧩 Grammar topic', callbackData: 'kevin_section_grammar' },
+    { text: '🧠 Vocabulary muammoni hal qilish', callbackData: 'kevin_section_vocabulary' },
+    { text: '📅 Qatnashuv bo‘yicha fikr', callbackData: 'kevin_section_attendance' },
+    { text: '📖 O‘qish / Tarjima feedback', callbackData: 'kevin_section_translation' },
+  ]
 }
 
 function checkAndSetAiCooldown(chatId: string) {
@@ -110,8 +181,50 @@ async function resolveParentByChatId(chatId: string) {
   }
 }
 
+async function sendRecentScoreHistoryToParent(input: { chatId: string; parentRow: any; unpacked: any }) {
+  const studentId = Number(input.unpacked?.studentId || 0)
+  if (!Number.isFinite(studentId) || studentId <= 0) return
+
+  const scoreRows = await prisma.score.findMany({
+    where: {
+      ...(input.parentRow?.adminId ? { adminId: Number(input.parentRow.adminId) } : {}),
+      studentId,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 3,
+    select: {
+      scoreType: true,
+      overallPercent: true,
+      createdAt: true,
+      subject: true,
+    },
+  })
+
+  if (!scoreRows.length) return
+
+  const historyLines = scoreRows.map((row, index) => {
+    const typeLabel = String(row.scoreType || '').toLowerCase() === 'mock' ? 'MOCK' : 'WEEKLY'
+    const percent = Number(row.overallPercent || 0).toFixed(1)
+    const date = row.createdAt ? new Date(row.createdAt).toLocaleDateString('uz-UZ') : '-'
+    return `${index + 1}) ${typeLabel} · ${percent}% · ${date}`
+  })
+
+  await sendTelegramMessage({
+    chatId: input.chatId,
+    text: `🧾 <b>So‘nggi natijalar tarixi</b>\n\n${historyLines.join('\n')}`,
+    modeButtons: true,
+  })
+}
+
 function normalizeQuestion(question: string) {
   return String(question || '').trim().toLowerCase()
+}
+
+function escapeHtml(value: string) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 function isBotAllowedQuestion(question: string) {
@@ -134,7 +247,7 @@ function scoreTrendFromRows(rows: Array<{ overallPercent?: number | null; value?
 function extractSkillInsights(scores: Array<{ breakdown?: any }>) {
   const first = scores[0]
   const raw = first?.breakdown
-  if (!raw || typeof raw !== 'object') return [] as Array<{ key: string; label: string; score: number; maxScore: number; percent: number }>
+  if (!raw || typeof raw !== 'object') return [] as SkillInsight[]
 
   return Object.entries(raw as Record<string, any>)
     .map(([key, value]) => {
@@ -151,9 +264,90 @@ function extractSkillInsights(scores: Array<{ breakdown?: any }>) {
         score,
         maxScore,
         percent,
+        comment: typeof (value as any)?.comment === 'string' ? String((value as any).comment).trim() : '',
+        selected: Boolean((value as any)?.selected),
+        weakestPart: typeof (value as any)?.weakestPart === 'string' ? String((value as any).weakestPart).trim() : '',
+        listeningParts: (value as any)?.listeningParts && typeof (value as any).listeningParts === 'object'
+          ? Object.entries((value as any).listeningParts as Record<string, any>).reduce((acc, [partKey, partValue]) => {
+              const parsed = Number(partValue)
+              if (Number.isFinite(parsed)) acc[partKey] = parsed
+              return acc
+            }, {} as Record<string, number>)
+          : undefined,
+        readingParts: (value as any)?.readingParts && typeof (value as any).readingParts === 'object'
+          ? Object.entries((value as any).readingParts as Record<string, any>).reduce((acc, [partKey, partValue]) => {
+              const parsed = Number(partValue)
+              if (Number.isFinite(parsed)) acc[partKey] = parsed
+              return acc
+            }, {} as Record<string, number>)
+          : undefined,
+        task11: Number.isFinite(Number((value as any)?.task11)) ? Number((value as any).task11) : undefined,
+        task12: Number.isFinite(Number((value as any)?.task12)) ? Number((value as any).task12) : undefined,
+        task2: Number.isFinite(Number((value as any)?.task2)) ? Number((value as any).task2) : undefined,
+        cefrScore75: Number.isFinite(Number((value as any)?.cefrScore75)) ? Number((value as any).cefrScore75) : undefined,
+        levelDetected: typeof (value as any)?.levelDetected === 'string' ? String((value as any).levelDetected).trim() : '',
+        lexical: Number.isFinite(Number((value as any)?.lexical)) ? Number((value as any).lexical) : undefined,
+        speakingGrammar: Number.isFinite(Number((value as any)?.grammar)) ? Number((value as any).grammar) : undefined,
+        speakingPronunciation: Number.isFinite(Number((value as any)?.pronunciation)) ? Number((value as any).pronunciation) : undefined,
+        synonymBonus: Number.isFinite(Number((value as any)?.synonymBonus)) ? Number((value as any).synonymBonus) : undefined,
+        wordList: Array.isArray((value as any)?.wordList)
+          ? (value as any).wordList.map((item: any) => String(item || '').trim()).filter(Boolean)
+          : [],
+        sourceWordList: Array.isArray((value as any)?.sourceWordList)
+          ? (value as any).sourceWordList.map((item: any) => String(item || '').trim()).filter(Boolean)
+          : [],
+        sentenceStructure: Number.isFinite(Number((value as any)?.sentenceStructure))
+          ? Number((value as any).sentenceStructure)
+          : undefined,
+        topicMastery: Number.isFinite(Number((value as any)?.topicMastery ?? (value as any)?.toBeTenses))
+          ? Number((value as any).topicMastery ?? (value as any).toBeTenses)
+          : undefined,
+        toBeTenses: Number.isFinite(Number((value as any)?.topicMastery ?? (value as any)?.toBeTenses))
+          ? Number((value as any).topicMastery ?? (value as any).toBeTenses)
+          : undefined,
+        spelling: Number.isFinite(Number((value as any)?.spelling))
+          ? Number((value as any).spelling)
+          : undefined,
       }
     })
     .filter((item) => Number.isFinite(item.percent))
+}
+
+function inferQuestionSkill(question: string, skills: SkillInsight[]) {
+  const mentionedSkillKey = getMentionedSkillKey(question, skills)
+  if (mentionedSkillKey) return mentionedSkillKey
+
+  const normalized = normalizeQuestion(question)
+  const available = new Set(skills.map((item) => item.key))
+
+  if (available.has('vocabulary') && /(bilmagan|soz|so\'z|lugat|lug\'at|word)/.test(normalized)) return 'vocabulary'
+  if (available.has('grammar') && /(xato gap|gap tuz|gramm|tense|to be|article|preposition)/.test(normalized)) return 'grammar'
+  if (available.has('attendance') && /(davomat|kechik|qatnash|kelma|absent|late)/.test(normalized)) return 'attendance'
+  if (available.has('translation') && /(tarjima|matn|o\'qish|oqish|translation|reading)/.test(normalized)) return 'translation'
+  if (available.has('reading') && /(tarjima|matn|o\'qish|oqish|reading)/.test(normalized)) return 'reading'
+
+  return ''
+}
+
+function getUnknownVocabularyWords(skill?: SkillInsight | null) {
+  if (!skill) return [] as string[]
+  const known = new Set((skill.wordList || []).map((word) => String(word || '').trim().toLowerCase()).filter(Boolean))
+  const source = (skill.sourceWordList || []).map((word) => String(word || '').trim()).filter(Boolean)
+  const unknown = source.filter((word) => !known.has(word.toLowerCase()))
+  return Array.from(new Set(unknown))
+}
+
+function buildExampleSentenceForWord(word: string, index: number) {
+  const cleaned = String(word || '').trim().replace(/\s+/g, ' ')
+  const safeWord = cleaned || 'word'
+  const templates = [
+    `I use the word "${safeWord}" in my homework today.`,
+    `My teacher asked me to say "${safeWord}" clearly in class.`,
+    `I can write "${safeWord}" in a correct sentence now.`,
+    `At home, I repeat "${safeWord}" three times before sleep.`,
+    `Tomorrow I will use "${safeWord}" when I speak English.`,
+  ]
+  return templates[index % templates.length]
 }
 
 function getMentionedSkillKey(question: string, skills: Array<{ key: string }>) {
@@ -295,6 +489,66 @@ function buildHomeworkSuggestions(skillKey: string) {
   ]
 }
 
+function buildPartSpecificRecommendations(skill: SkillInsight) {
+  const weakestPart = String(skill.weakestPart || '').toLowerCase()
+  const key = skill.key
+
+  if (key === 'listening') {
+    if (weakestPart.includes('part 3') || weakestPart.includes('part 5')) {
+      return [
+        'Map/matching savollar uchun avval variantlarni tez ko‘zdan kechiring, keyin audio paytida keyword belgilang.',
+        'Distractorlarni ajratish uchun har testdan keyin “nega shu javob noto‘g‘ri” deb 3 ta izoh yozing.',
+        'Part 3/5 uchun haftasiga 3 marta 12 savollik timed drill ishlang.',
+      ]
+    }
+    if (weakestPart.includes('part 6')) {
+      return [
+        'Long lecture uchun note-taking shablonidan foydalaning: sabab → natija → misol.',
+        'Har listeningdan keyin 5 ta signal phrase yozib chiqing (however, therefore, in contrast).',
+        'Part 6 bo‘yicha haftasiga 2 marta 15 daqiqalik focused practice qiling.',
+      ]
+    }
+  }
+
+  if (key === 'reading') {
+    if (weakestPart.includes('part 2') || weakestPart.includes('part 4')) {
+      return [
+        'Skimmingni 90 soniyada yakunlab, har paragrafga 2-3 so‘zli heading qo‘ying.',
+        'Paraphrase signal so‘zlarini ajratish uchun matndan synonym juftliklar ro‘yxatini tuzing.',
+        'Part 2/4 uchun haftasiga 3 marta 10 savollik speed-drill ishlang.',
+      ]
+    }
+    if (weakestPart.includes('part 5')) {
+      return [
+        'Inference savollarida dalil bo‘lgan 1-2 satrni marker bilan belgilang.',
+        'Har testdan keyin “evidence sentence” daftarini yuriting.',
+        'Part 5 uchun haftasiga 2 marta 20 daqiqalik tahliliy reading qiling.',
+      ]
+    }
+  }
+
+  if (key === 'writing' && Number.isFinite(skill.task2)) {
+    const weakTask = (Number(skill.task2) <= Number(skill.task11 || 100) && Number(skill.task2) <= Number(skill.task12 || 100))
+      ? 'Task 2'
+      : (Number(skill.task11 || 100) <= Number(skill.task12 || 100) ? 'Task 1.1' : 'Task 1.2')
+    return [
+      `${weakTask} uchun kuniga 1 ta mini-draft yozing (kirish + 2 ta asosiy fikr).`,
+      'Yozuvdan keyin check-list: grammar, linking, lexical variation bo‘yicha 3 bosqichli tekshiruv qiling.',
+      'Haftasiga 2 marta timed writing bilan progressni solishtiring.',
+    ]
+  }
+
+  if (key === 'speaking' && Number.isFinite(skill.cefrScore75)) {
+    return [
+      'Har kuni 12 daqiqa speaking drill: 4 daqiqa fluency, 4 daqiqa lexical variation, 4 daqiqa pronunciation.',
+      'Har javobda kamida 2 ta advanced connector ishlatish odatini kiriting.',
+      'Haftasiga 3 marta 75-ball rubric asosida self-assessment qiling.',
+    ]
+  }
+
+  return []
+}
+
 function buildInstantInsightReply(question: string, snapshot: StudentInsightSnapshot) {
   const normalized = normalizeQuestion(question)
   const attendanceLabel = snapshot.lastAttendance === 'late'
@@ -318,10 +572,135 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
 
   const sortedSkills = [...snapshot.skills].sort((a, b) => a.percent - b.percent)
   const weakest = sortedSkills[0]
-  const mentionedSkillKey = getMentionedSkillKey(question, snapshot.skills)
+  const mentionedSkillKey = inferQuestionSkill(question, snapshot.skills)
   const mentionedSkill = snapshot.skills.find((item) => item.key === mentionedSkillKey)
 
   if (mentionedSkill) {
+    if (['listening', 'reading', 'writing', 'speaking'].includes(mentionedSkill.key)) {
+      const skillPercent = Number(mentionedSkill.percent || 0)
+      const status = skillPercent < 50 ? 'kritik darajada past' : skillPercent < 70 ? 'o‘rtacha, tez kuchaytirish kerak' : 'barqaror'
+      const weakestPart = String(mentionedSkill.weakestPart || '').trim()
+      const concreteRecommendation: Record<string, string[]> = {
+        listening: [
+          'Har kuni 20 daqiqa audio eshiting va 8 ta kalit so‘z yozib chiqing.',
+          'Haftasiga 3 marta 10 savollik time-limited listening test ishlang.',
+          'Xato savollarni alohida daftarga yozib, sababini 1 jumlada belgilang.',
+        ],
+        reading: [
+          'Har kuni 1 ta qisqa matnni 12 daqiqada o‘qib, 5 savolga javob yozing.',
+          'Skimming/scanning uchun 10 daqiqalik alohida mashq qiling.',
+          'Har matndan 6 ta yangi so‘zni gapda qo‘llang.',
+        ],
+        writing: [
+          'Task Response/Cohesion/Grammar bo‘yicha kuniga 1 ta mini-paragraf yozing (80-100 so‘z).',
+          'Har yozuvdan keyin kamida 5 ta xatoni qayta tuzatib yozing.',
+          'Haftasiga 2 marta to‘liq writing task time-limit bilan bajaring.',
+        ],
+        speaking: [
+          'Har kuni 10 daqiqa ovoz yozib speaking practice qiling.',
+          'Fluency uchun 5 ta savolga 1 daqiqadan to‘xtamasdan javob bering.',
+          'Pronunciation uchun minimal pairs drill va synonym ishlatish mashqi qiling.',
+        ],
+      }
+      const partSpecificRecommendations = buildPartSpecificRecommendations(mentionedSkill)
+      const recommendationBlock = partSpecificRecommendations.length
+        ? partSpecificRecommendations
+        : (concreteRecommendation[mentionedSkill.key] || concreteRecommendation.reading)
+      const cefrSpeakingMeta = mentionedSkill.key === 'speaking' && Number.isFinite(mentionedSkill.cefrScore75)
+        ? `CEFR score: ${Number(mentionedSkill.cefrScore75)}/75${mentionedSkill.levelDetected ? ` (${mentionedSkill.levelDetected})` : ''}.`
+        : ''
+
+      return [
+        ...mainSummary,
+        '',
+        `🎯 <b>${mentionedSkill.label} diagnostika:</b> ${mentionedSkill.score}/${mentionedSkill.maxScore} (${skillPercent.toFixed(1)}%).`,
+        `🧠 Holat: ${status}.`,
+        ...(weakestPart ? [`📍 Eng zaif qism: ${weakestPart}.`] : []),
+        ...(cefrSpeakingMeta ? [`🧭 ${cefrSpeakingMeta}`] : []),
+        ...(mentionedSkill.comment ? [`👩‍🏫 O‘qituvchi izohi: <i>${mentionedSkill.comment}</i>`] : []),
+        '',
+        '<b>✅ Aniq tavsiya (7 kun):</b>',
+        ...(recommendationBlock.map((item) => `• ${item}`)),
+      ].join('\n')
+    }
+
+    if (mentionedSkill.key === 'vocabulary') {
+      const unknownWords = getUnknownVocabularyWords(mentionedSkill)
+      const sampleWords = unknownWords.slice(0, 8)
+      const sentenceExamples = sampleWords.map((word, index) => `• ${escapeHtml(word)} → ${escapeHtml(buildExampleSentenceForWord(word, index))}`)
+      const vocabComment = mentionedSkill.comment || 'Lug‘atni gap ichida qo‘llashga ko‘proq mashq kerak.'
+
+      return [
+        ...mainSummary,
+        '',
+        `🎯 <b>Vocabulary:</b> ${mentionedSkill.score}/${mentionedSkill.maxScore} (${mentionedSkill.percent.toFixed(1)}%).`,
+        `🧠 Tahlil: ${vocabComment}`,
+        `✅ Hozir asosiy kamchilik: bilmagan so‘zlarni gapda ishlatish barqaror emas.`,
+        ...(sampleWords.length > 0
+          ? [
+              '',
+              '<b>📝 Bilmagan so‘zlarga bittadan gap:</b>',
+              ...sentenceExamples,
+            ]
+          : []),
+        '',
+        '📌 7 kunlik mini-reja: har kuni 8-10 ta so‘zdan kamida 5 tasini gapda ishlating, keyingi darsda og‘zaki aytib bering.',
+      ].join('\n')
+    }
+
+    if (mentionedSkill.key === 'grammar') {
+      const sentenceStructure = Number(mentionedSkill.sentenceStructure ?? 0)
+      const topicMastery = Number(mentionedSkill.topicMastery ?? mentionedSkill.toBeTenses ?? 0)
+      const spelling = Number(mentionedSkill.spelling ?? 0)
+      const weakAreas: string[] = []
+
+      if (sentenceStructure > 0 && sentenceStructure < 24) weakAreas.push('sentence structure')
+      if (topicMastery > 0 && topicMastery < 24) weakAreas.push('topic mastery')
+      if (spelling > 0 && spelling < 12) weakAreas.push('spelling')
+
+      return [
+        ...mainSummary,
+        '',
+        `🎯 <b>Grammar:</b> ${mentionedSkill.score}/${mentionedSkill.maxScore} (${mentionedSkill.percent.toFixed(1)}%).`,
+        `🧠 Kamchilik: ${weakAreas.length ? weakAreas.join(', ') : 'grammar asoslarini mustahkamlash kerak'}.`,
+        ...(mentionedSkill.comment ? [`👩‍🏫 O‘qituvchi izohi: <i>${mentionedSkill.comment}</i>`] : []),
+        '',
+        '<b>✅ Tuzatish rejasi:</b>',
+        '• Har kuni 10 ta gap: Subject + Verb + Object tartibida yozish.',
+        '• Har kuni 15 ta "to be / tense" mashqi (am/is/are + was/were).',
+        '• Har darsda 5 ta xato yozilgan gapni to‘g‘rilab qayta yozish.',
+      ].join('\n')
+    }
+
+    if (mentionedSkill.key === 'attendance') {
+      const riskText = snapshot.absentCount14d >= 2 || snapshot.lateCount14d >= 2
+        ? 'davomat intizomi pasaygan'
+        : 'davomat nazorat ostida, lekin barqarorlik kerak'
+
+      return [
+        ...mainSummary,
+        '',
+        `🎯 <b>Attendance:</b> ${mentionedSkill.score}/${mentionedSkill.maxScore} (${mentionedSkill.percent.toFixed(1)}%).`,
+        `🧠 Tahlil: ${riskText}. Oxirgi 14 kunda kechikish ${snapshot.lateCount14d} ta, qatnashmaslik ${snapshot.absentCount14d} ta.`,
+        '✅ Fikr: darsdan 20 daqiqa oldin yo‘lga chiqish va kechqurun ertangi dars uchun checklist tayyorlash kerak.',
+      ].join('\n')
+    }
+
+    if (mentionedSkill.key === 'translation' || mentionedSkill.key === 'reading') {
+      return [
+        ...mainSummary,
+        '',
+        `🎯 <b>${mentionedSkill.label}:</b> ${mentionedSkill.score}/${mentionedSkill.maxScore} (${mentionedSkill.percent.toFixed(1)}%).`,
+        `🧠 Tahlil: matnni tushunish va tarjimada aniqlikni oshirish kerak.`,
+        ...(mentionedSkill.comment ? [`👩‍🏫 O‘qituvchi izohi: <i>${mentionedSkill.comment}</i>`] : []),
+        '',
+        '<b>✅ Amaliy feedback:</b>',
+        '• Har kuni 5 ta qisqa gapni EN↔UZ tarjima qiling.',
+        '• Matndan 6 ta kalit so‘zni ajratib, har biri bilan 1 tadan gap yozing.',
+        '• Tarjimani ovoz chiqarib o‘qib, grammar xatolarini tekshiring.',
+      ].join('\n')
+    }
+
     const links = buildYouTubeLinksForSkill(mentionedSkill.key)
     const weeklyPlan = buildWeeklyPlanForSkill(mentionedSkill.key)
     const homework = buildHomeworkSuggestions(mentionedSkill.key)
@@ -335,6 +714,9 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
     if (snapshot.lastAttendance === 'absent' || snapshot.lastAttendance === 'late') {
       reasons.push('davomat ritmi beqaror')
     }
+    if (mentionedSkill.comment) {
+      reasons.push(`o‘qituvchi izohi: ${mentionedSkill.comment}`)
+    }
     if (snapshot.scoreTrend === 'down') {
       reasons.push('umumiy o‘zlashtirish pasayish trendida')
     }
@@ -347,6 +729,7 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
       '',
       `🎯 <b>${mentionedSkill.label}</b>: ${mentionedSkill.score}/${mentionedSkill.maxScore} (${mentionedSkill.percent.toFixed(1)}%) — ${statusText}.`,
       `🧠 Ehtimoliy sabab: ${reasons.length ? reasons.join('; ') : 'muntazam mashq yetishmasligi bo‘lishi mumkin.'}`,
+      ...(mentionedSkill.comment ? ['', `👩‍🏫 O‘qituvchi izohi: <i>${mentionedSkill.comment}</i>`] : []),
       '',
       '<b>📅 7 kunlik action-plan:</b>',
       ...weeklyPlan.map((item) => `• ${item}`),
@@ -394,6 +777,11 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
 
   if (/ball|baho|reyting|past/.test(normalized)) {
     const weakSkillsText = sortedSkills.slice(0, 2).map((item) => `${item.label}: ${item.percent.toFixed(1)}%`).join(', ')
+    const weakComments = sortedSkills
+      .slice(0, 2)
+      .filter((item) => item.comment)
+      .map((item) => `${item.label}: ${(item.comment || '').trim()}`)
+      .filter(Boolean)
     const weakestKey = sortedSkills[0]?.key || 'grammar'
     const weeklyPlan = buildWeeklyPlanForSkill(weakestKey)
     const homework = buildHomeworkSuggestions(weakestKey)
@@ -402,6 +790,7 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
       '',
       `🎯 Tahlil: Hozir ${trendText}.`,
       `${weakSkillsText ? `⚠️ Past ko‘nikmalar: ${weakSkillsText}.` : ''}`,
+      ...(weakComments.length ? [`👩‍🏫 O‘qituvchi izohlari: ${weakComments.join(' | ')}`] : []),
       '✅ Tavsiya: eng past 2 ko‘nikmaga har kuni 25-30 daqiqa mashq qiling va haftalik mini-test qiling.',
       '',
       '<b>📅 Boshlash uchun 1 haftalik reja:</b>',
@@ -423,6 +812,7 @@ function buildInstantInsightReply(question: string, snapshot: StudentInsightSnap
       ...mainSummary,
       '',
       `🧭 <b>Asosiy yo‘nalish:</b> hozir ${weakestLabel} ustida ishlash eng katta natija beradi.`,
+      ...(sortedSkills[0]?.comment ? [`👩‍🏫 O‘qituvchi izohi: <i>${sortedSkills[0].comment}</i>`, ''] : ['']),
       '',
       '<b>📅 7 kunlik action-plan:</b>',
       ...weeklyPlan.map((item) => `• ${item}`),
@@ -589,9 +979,17 @@ async function buildParentAssistantReply(input: {
   snapshot: StudentInsightSnapshot
 }) {
   const fastReply = buildInstantInsightReply(input.question, input.snapshot)
+  const inferredSkillKey = inferQuestionSkill(input.question, input.snapshot.skills)
+  const inferredSkillLabel = inferredSkillKey ? (SKILL_LABEL[inferredSkillKey] || inferredSkillKey) : 'Auto'
+  const beginnerSkillSet = ['vocabulary', 'grammar', 'translation', 'attendance']
+  const isBeginnerSnapshot = beginnerSkillSet.every((key) => input.snapshot.skills.some((item) => item.key === key))
+  const vocabularySkill = input.snapshot.skills.find((item) => item.key === 'vocabulary')
+  const unknownVocabularyWords = getUnknownVocabularyWords(vocabularySkill)
 
   const skillsTable = input.snapshot.skills.length
-    ? input.snapshot.skills.map((item) => `${item.label}: ${item.score}/${item.maxScore} (${item.percent.toFixed(1)}%)`).join('; ')
+    ? input.snapshot.skills
+        .map((item) => `${item.label}: ${item.score}/${item.maxScore} (${item.percent.toFixed(1)}%)${item.comment ? ` | Izoh: ${item.comment}` : ''}${item.key === 'vocabulary' ? ` | Bilmagan so'zlar: ${getUnknownVocabularyWords(item).join(', ') || 'yo\'q'}` : ''}`)
+        .join('; ')
     : "Ko'nikma kesimidagi ma'lumot yo'q"
 
   const prompt = [
@@ -600,6 +998,7 @@ async function buildParentAssistantReply(input: {
     'Foydalanuvchi istalgan mavzuda savol berishi mumkin; savolni rad qilmang va imkon qadar foydali javob bering.',
     'Agar ma\'lumot yetarli bo\'lmasa, taxmin qilmang va nimasi yetishmayotganini ayting.',
     'Maktab ichki ma\'lumotlari asosida bolaning holatini izohlang va amaliy tavsiya bering.',
+    'Ko‘nikmalar bo‘yicha o‘qituvchi izohlari mavjud bo‘lsa, aynan shu izohlardan kelib chiqib yechim, uy vazifa va resurslar bering.',
     '',
     `<OTA_ONA>${input.snapshot.parentName}</OTA_ONA>`,
     `<FARZAND>${input.snapshot.studentName}</FARZAND>`,
@@ -614,13 +1013,23 @@ async function buildParentAssistantReply(input: {
     `<14KUN_QATNASHMASLIK>${input.snapshot.absentCount14d}</14KUN_QATNASHMASLIK>`,
     `<OXIRGI_KECHIKISH_IZOHI>${input.snapshot.lastLateNote}</OXIRGI_KECHIKISH_IZOHI>`,
     `<BALL_TREND>${input.snapshot.scoreTrend}</BALL_TREND>`,
+    `<LEVEL_TRACK>${isBeginnerSnapshot ? 'beginner' : 'mixed/advanced'}</LEVEL_TRACK>`,
+    `<TARGET_SECTION>${inferredSkillLabel}</TARGET_SECTION>`,
+    `<VOCAB_UNKNOWN_WORDS>${unknownVocabularyWords.join(', ') || 'yo\'q'}</VOCAB_UNKNOWN_WORDS>`,
     `<SKILL_TABLE>${skillsTable}</SKILL_TABLE>`,
     '',
     `Savol: ${input.question}`,
     '',
     'Javob formati: 1) Qisqa holat 2) Sabab tahlili 3) 2-3 ta amaliy tavsiya.',
     'Agar savolda fan/ko‘nikma so‘ralsa, aynan o‘sha ko‘nikma bo‘yicha javob bering.',
-    'Agar foydali manba yoki mashq so‘ralsa, kamida 2 ta YouTube link bering.'
+    'SAVOLNI O‘ZINGIZ TAHLIL QILING: qaysi bo‘lim so‘ralganini aniqlang va aynan shu bo‘limga mos javob yozing.',
+    'Agar TARGET_SECTION = Grammar bo‘lsa: kamchilik turini ayting va 3 ta tuzatish mashqini bering.',
+    'Agar TARGET_SECTION = Vocabulary bo‘lsa: VOCAB_UNKNOWN_WORDS dagi har bir so‘z uchun bittadan sodda inglizcha gap yozing (maksimal 8 ta).',
+    'Agar TARGET_SECTION = Attendance bo‘lsa: davomat bo‘yicha aniq fikr bildiring va 7 kunlik intizom reja bering.',
+    'Agar TARGET_SECTION = Translation yoki Reading bo‘lsa: o‘qish/tarjima xatolari uchun 3 ta amaliy drill bering.',
+    'Agar LEVEL_TRACK = beginner bo‘lsa, javobni beginner o‘quvchiga mos, sodda va juda aniq qiling.',
+    'Agar foydali manba yoki mashq so‘ralsa, kamida 2 ta YouTube link bering.',
+    'Javobda umumiy gaplardan qoching, section izohlarini konkret amalga aylantiring.'
   ].join('\n')
 
   const aiText = await askGeminiWithFallback(prompt)
@@ -638,20 +1047,25 @@ function buildBotModeReply(input: { question: string; snapshot: StudentInsightSn
       '📘 <b>KEVIN BOT rejimi</b>',
       '',
       'Men faqat quyidagi yo\'nalishlarda javob bera olaman:',
-      '• davomat holati',
-      '• umumiy ball va trend',
-      '• guruh reytingi',
-      '• to\'lov holati',
-      '• skills (listening/reading/speaking/writing/...)',
-      '• reja, uyga vazifa, YouTube tavsiyasi',
+      '• Grammar',
+      '• Vocabulary',
+      '• Attendance (Qatnashuv)',
+      '• Translation / Reading',
       '',
       'Namuna savollar:',
-      '• Davomat nega pasaydi?',
-      '• Listening bo\'yicha reja ber',
-      '• Guruh reytingida nechanchi o\'rin?',
-      '',
-      'Erkin savol-javob uchun <b>KEVIN AI</b> tugmasini bosing.'
+      '• Grammar topic bo‘yicha kamchilik nima?',
+      '• Vocabulary muammoni hal qilish',
+      '• Qatnashuv bo‘yicha fikr ber',
+      '• O‘qish / Tarjima uchun feedback ber'
     ].join('\n')
+  }
+
+  const inferredSkillKey = inferQuestionSkill(input.question, input.snapshot.skills)
+  if (!inferredSkillKey) {
+    const weakest = getWeakestSkill(input.snapshot)
+    if (weakest) {
+      return buildInstantInsightReply(`${weakest.label} bo‘yicha diagnostika va aniq tavsiya ber`, input.snapshot)
+    }
   }
 
   return buildInstantInsightReply(input.question, input.snapshot)
@@ -683,6 +1097,120 @@ function parsePhoneLinkCode(text: string) {
   return normalized
 }
 
+async function buildSnapshotByChatId(chatId: string): Promise<StudentInsightSnapshot | null> {
+  const linkedParent = await resolveParentByChatId(chatId)
+  if (!linkedParent) return null
+
+  const linkedStudentId = linkedParent?.unpacked?.studentId ? Number(linkedParent.unpacked.studentId) : null
+  const student = linkedStudentId
+    ? await prisma.student.findUnique({ where: { id: linkedStudentId }, select: { id: true, fullName: true, group: true, adminId: true } })
+    : null
+
+  const groupInfo = student?.group
+    ? await prisma.group.findFirst({ where: { name: student.group }, select: { level: true } })
+    : null
+
+  const [scores, attendance, payments] = linkedStudentId
+    ? await Promise.all([
+        prisma.score.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 30 }),
+        prisma.attendance.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 30 }),
+        prisma.payment.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 10 }),
+      ])
+    : [[], [], []]
+
+  const latestScore = scores[0] ? Number(scores[0].overallPercent ?? scores[0].value ?? 0) : 0
+  const attendedCount = attendance.filter((row) => row.status === 'present' || row.status === 'late').length
+  const attendanceRate = attendance.length ? Math.round((attendedCount / attendance.length) * 100) : 0
+  const lastAttendance = attendance[0]?.status || "yo'q"
+  const lastPaymentStatus = payments[0]?.status || "yo'q"
+  const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000)
+  const recentAttendance = attendance.filter((row) => {
+    const d = row?.date ? new Date(row.date).getTime() : 0
+    return d >= fourteenDaysAgo
+  })
+  const lateCount14d = recentAttendance.filter((row) => row.status === 'late').length
+  const absentCount14d = recentAttendance.filter((row) => row.status === 'absent').length
+  const lastLateNote = attendance.find((row) => row.status === 'late' && row.note)?.note || "yo'q"
+  const scoreTrend = scoreTrendFromRows(scores)
+  const skills = extractSkillInsights(scores)
+
+  const groupStudents = student?.group
+    ? await prisma.student.findMany({ where: { group: student.group }, select: { id: true, fullName: true } })
+    : []
+  const groupStudentIds = groupStudents.map((row) => row.id)
+
+  const [weeklyRows, mockRows] = groupStudentIds.length
+    ? await Promise.all([
+        prisma.score.findMany({ where: { studentId: { in: groupStudentIds }, scoreType: 'weekly' }, orderBy: { createdAt: 'desc' } }),
+        prisma.score.findMany({ where: { studentId: { in: groupStudentIds }, scoreType: 'mock' }, orderBy: { createdAt: 'desc' } }),
+      ])
+    : [[], []]
+
+  const getRank = (rows: typeof weeklyRows, studentId?: number | null) => {
+    if (!studentId || !rows.length || !groupStudents.length) return 0
+
+    const latestByStudent = new Map<number, number>()
+    for (const row of rows) {
+      if (!row.studentId || latestByStudent.has(row.studentId)) continue
+      latestByStudent.set(row.studentId, Number(row.overallPercent ?? row.value ?? 0))
+    }
+
+    const ranked = groupStudents
+      .map((groupStudent) => ({
+        id: groupStudent.id,
+        score: latestByStudent.get(groupStudent.id) ?? 0,
+      }))
+      .sort((a, b) => b.score - a.score)
+
+    let currentRank = 0
+    let previousScore: number | null = null
+    for (let i = 0; i < ranked.length; i += 1) {
+      const row = ranked[i]
+      if (previousScore === null || row.score < previousScore) {
+        currentRank = i + 1
+        previousScore = row.score
+      }
+      if (row.id === studentId) return currentRank
+    }
+
+    return 0
+  }
+
+  const weeklyRank = getRank(weeklyRows, student?.id)
+  const mockRank = getRank(mockRows, student?.id)
+
+  return {
+    parentName: linkedParent?.unpacked?.fullName || linkedParent?.raw?.fullName || 'Ota-ona',
+    studentName: student?.fullName || 'Noma\'lum',
+    group: student?.group || 'Noma\'lum',
+    level: normalizeLevel(groupInfo?.level || ''),
+    attendanceRate,
+    latestScore,
+    weeklyRank,
+    mockRank,
+    lastPaymentStatus,
+    lastAttendance,
+    lastLateNote,
+    lateCount14d,
+    absentCount14d,
+    scoreTrend,
+    skills,
+  }
+}
+
+function getSectionPresetQuestion(section: string) {
+  const normalized = String(section || '').trim().toLowerCase()
+  if (normalized === 'listening') return 'Listening bo‘yicha diagnostika qilib aniq mashq reja ber'
+  if (normalized === 'reading') return 'Reading bo‘yicha diagnostika qilib aniq mashq reja ber'
+  if (normalized === 'writing') return 'Writing bo‘yicha diagnostika qilib aniq mashq reja ber'
+  if (normalized === 'speaking') return 'Speaking bo‘yicha diagnostika qilib aniq mashq reja ber'
+  if (normalized === 'grammar') return 'Grammar topic bo‘yicha kamchilikni tahlil qilib tuzatish reja ber'
+  if (normalized === 'vocabulary') return 'Vocabulary muammoni hal qilish va bilmagan so‘zlarga gap tuzib ber'
+  if (normalized === 'attendance') return 'Qatnashuv bo‘yicha fikr va amaliy tavsiya ber'
+  if (normalized === 'translation') return 'O‘qish va tarjima bo‘yicha feedback ber'
+  return 'Beginner bo‘limi bo‘yicha feedback ber'
+}
+
 export async function GET() {
   const tokenConfigured = Boolean(process.env.TELEGRAM_BOT_TOKEN)
   const parentPortalConfigured = Boolean(process.env.PARENT_PORTAL_URL || process.env.NEXT_PUBLIC_APP_URL)
@@ -704,38 +1232,154 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    const membershipUpdate = body?.my_chat_member || body?.chat_member
+    const memberChatId = membershipUpdate?.chat?.id ? String(membershipUpdate.chat.id) : ''
+    const oldStatus = String(membershipUpdate?.old_chat_member?.status || '').toLowerCase()
+    const newStatus = String(membershipUpdate?.new_chat_member?.status || '').toLowerCase()
+
+    if (memberChatId && newStatus) {
+      const becameDisconnected = ['left', 'kicked', 'restricted'].includes(newStatus)
+      const becameConnected = ['member', 'administrator', 'creator'].includes(newStatus)
+
+      if (becameDisconnected || becameConnected) {
+        await updateParentBotStatusByChatId({
+          chatId: memberChatId,
+          status: becameDisconnected ? 'DISCONNECTED' : 'CONNECTED',
+          errorDescription: becameDisconnected
+            ? `Telegram membership change: ${oldStatus || 'unknown'} -> ${newStatus}`
+            : undefined,
+        })
+
+        return NextResponse.json({
+          ok: true,
+          action: 'membership_status_updated',
+          status: newStatus,
+        })
+      }
+    }
+
     const callbackQuery = body?.callback_query
 
     if (callbackQuery?.id && callbackQuery?.message?.chat?.id) {
       const chatId = String(callbackQuery.message.chat.id)
       const data = String(callbackQuery.data || '')
 
-      if (data === 'kevin_mode_ai' || data === 'kevin_mode_bot') {
-        const nextMode: 'ai' | 'bot' = data === 'kevin_mode_ai' ? 'ai' : 'bot'
-        chatAssistantModeByChat.set(chatId, nextMode)
+      if (data === 'copy_card_details') {
+        const cardNumber = process.env.PAYMENT_CARD_NUMBER || DEFAULT_CARD_NUMBER
+        await answerTelegramCallbackQuery({
+          callbackQueryId: String(callbackQuery.id),
+          text: `Karta: ${cardNumber}`,
+        })
+
+        await sendTelegramMessage({
+          chatId,
+          text: `📋 <b>Karta rekvizitlari</b>\n\n<code>${cardNumber}</code>\n\nNusxalash uchun karta raqamini bosib ushlab turing.`,
+        })
+
+        return NextResponse.json({ ok: true, action: 'copy_card_details' })
+      }
+
+      if (data.startsWith('contact_phone:')) {
+        const phoneDigits = String(data.slice('contact_phone:'.length) || '').replace(/\D/g, '')
 
         await answerTelegramCallbackQuery({
           callbackQueryId: String(callbackQuery.id),
-          text: nextMode === 'ai' ? 'KEVIN AI rejimi yoqildi' : 'KEVIN BOT rejimi yoqildi',
+          text: phoneDigits ? 'Kontakt yuborildi' : 'Telefon raqami topilmadi',
         })
 
-        const linkedParent = await resolveParentByChatId(chatId)
-        const parentName = linkedParent?.unpacked?.fullName || 'ota-ona'
-        const modeText = nextMode === 'ai'
-          ? `🤖 <b>KEVIN AI yoqildi</b>\n\nHurmatli <b>${parentName}</b>, endi farzandingiz bo\'yicha erkin savollarni bemalol bering.`
-          : `📘 <b>KEVIN BOT yoqildi</b>\n\nHurmatli <b>${parentName}</b>, endi men faqat tizimdagi tayyor yo\'nalishlar bo\'yicha javob beraman.`
+        if (phoneDigits) {
+          await sendTelegramContactCard({
+            chatId,
+            phoneNumber: `+${phoneDigits}`,
+            firstName: 'Aloqa',
+            lastName: "Kevin's Academy",
+          })
+
+          await sendTelegramMessage({
+            chatId,
+            text: `📞 <b>Aloqa raqami</b>\n\n<code>+${phoneDigits}</code>\n\nKontakt kartadan qo‘ng‘iroq qiling yoki saqlab qo‘ying.`,
+          })
+        }
+
+        return NextResponse.json({ ok: true, action: 'contact_phone' })
+      }
+
+      if (data === 'kevin_show_sections') {
+        const snapshot = await buildSnapshotByChatId(chatId)
+        if (!snapshot) {
+          const sent = await sendTelegramMessage({
+            chatId,
+            text: "ℹ️ Avval botni bog'lang: <code>/start +998901234567</code>",
+            modeButtons: true,
+          })
+          if (!sent.ok) {
+            console.error('Telegram webhook: failed sending section no-link message', sent)
+          }
+          return NextResponse.json({ ok: true, action: 'kevin_show_sections_no_link' })
+        }
+
+        const track = getSnapshotTrack(snapshot)
+        const pickerButtons = getSectionButtonsForTrack(track)
+
+        await answerTelegramCallbackQuery({
+          callbackQueryId: String(callbackQuery.id),
+          text: track === 'intermediate' ? 'Intermediate bo‘limlardan birini tanlang' : 'Beginner bo‘limlardan birini tanlang',
+        })
 
         const sent = await sendTelegramMessage({
           chatId,
-          text: modeText,
-          modeButtons: true,
-          activeMode: nextMode,
+          text: [
+            '📘 <b>Savol uchun KEVIN BOT</b>',
+            '',
+            track === 'intermediate'
+              ? 'Intermediate/CEFR bo‘limini tanlang. Men eng past ko‘nikmaga tayangan holda aniq diagnostika va mashq reja beraman.'
+              : 'Beginner bo‘limini tanlang. Men shu bo‘lim bo‘yicha farzandingizning joriy ballariga tayangan holda javob beraman.'
+          ].join('\n'),
+          modeButtons: false,
+          extraButtons: pickerButtons
         })
         if (!sent.ok) {
-          console.error('Telegram webhook: failed sending mode-switch message', sent)
+          console.error('Telegram webhook: failed sending section picker message', sent)
         }
 
-        return NextResponse.json({ ok: true, mode: nextMode })
+        return NextResponse.json({ ok: true, action: 'kevin_show_sections' })
+      }
+
+      if (data.startsWith('kevin_section_')) {
+        const section = String(data.replace('kevin_section_', '') || '').trim().toLowerCase()
+        await answerTelegramCallbackQuery({
+          callbackQueryId: String(callbackQuery.id),
+          text: 'Bo‘lim tahlili tayyorlanmoqda',
+        })
+
+        const snapshot = await buildSnapshotByChatId(chatId)
+        if (!snapshot) {
+          const sent = await sendTelegramMessage({
+            chatId,
+            text: "ℹ️ Avval botni bog'lang: <code>/start +998901234567</code>",
+            modeButtons: true,
+          })
+          if (!sent.ok) {
+            console.error('Telegram webhook: failed sending section no-link message', sent)
+          }
+          return NextResponse.json({ ok: true, action: 'kevin_section_no_link' })
+        }
+
+        const botText = buildBotModeReply({
+          question: getSectionPresetQuestion(section),
+          snapshot,
+        })
+
+        const sent = await sendTelegramMessage({
+          chatId,
+          text: `📘 <b>KEVIN BOT</b>\n\n${botText}`,
+          modeButtons: true,
+        })
+        if (!sent.ok) {
+          console.error('Telegram webhook: failed sending section feedback', sent)
+        }
+
+        return NextResponse.json({ ok: true, action: `kevin_section_${section}` })
       }
 
       await answerTelegramCallbackQuery({ callbackQueryId: String(callbackQuery.id) })
@@ -748,15 +1392,16 @@ export async function POST(request: Request) {
     const text = typeof message?.text === 'string'
       ? message.text
       : (typeof message?.caption === 'string' ? message.caption : '')
+    const contactPhone = typeof message?.contact?.phone_number === 'string' ? String(message.contact.phone_number) : ''
     const startMessage = isStartCommand(text)
 
-    if (!chatId || !text) {
+    if (!chatId || (!text && !contactPhone)) {
       return NextResponse.json({ ok: true })
     }
 
     const startLinkCode = parseStartLinkCode(text)
     const phoneLinkCode = parsePhoneLinkCode(text)
-    const linkCode = startLinkCode || phoneLinkCode
+    const linkCode = startLinkCode || phoneLinkCode || contactPhone
 
     if (!startMessage && !linkCode) {
       const cooldown = checkAndSetAiCooldown(chatId)
@@ -772,9 +1417,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, rateLimited: true, waitSec })
       }
 
-      const linkedParent = await resolveParentByChatId(chatId)
+      const snapshot = await buildSnapshotByChatId(chatId)
 
-      if (!linkedParent) {
+      if (!snapshot) {
         const sent = await sendTelegramMessage({
           chatId,
           text: "ℹ️ Avval botni bog'lang: <code>/start +998901234567</code>"
@@ -785,112 +1430,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true })
       }
 
-      const linkedStudentId = linkedParent?.unpacked?.studentId ? Number(linkedParent.unpacked.studentId) : null
-      const student = linkedStudentId
-        ? await prisma.student.findUnique({ where: { id: linkedStudentId }, select: { id: true, fullName: true, group: true, adminId: true } })
-        : null
-
-      const [scores, attendance, payments] = linkedStudentId
-        ? await Promise.all([
-            prisma.score.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 30 }),
-            prisma.attendance.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 30 }),
-            prisma.payment.findMany({ where: { studentId: linkedStudentId }, orderBy: { createdAt: 'desc' }, take: 10 }),
-          ])
-        : [[], [], []]
-
-      const latestScore = scores[0] ? Number(scores[0].overallPercent ?? scores[0].value ?? 0) : 0
-      const attendedCount = attendance.filter((row) => row.status === 'present' || row.status === 'late').length
-      const attendanceRate = attendance.length ? Math.round((attendedCount / attendance.length) * 100) : 0
-      const lastAttendance = attendance[0]?.status || "yo'q"
-      const lastPaymentStatus = payments[0]?.status || "yo'q"
-      const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000)
-      const recentAttendance = attendance.filter((row) => {
-        const d = row?.date ? new Date(row.date).getTime() : 0
-        return d >= fourteenDaysAgo
+      const aiText = buildBotModeReply({
+        question: text,
+        snapshot,
       })
-      const lateCount14d = recentAttendance.filter((row) => row.status === 'late').length
-      const absentCount14d = recentAttendance.filter((row) => row.status === 'absent').length
-      const lastLateNote = attendance.find((row) => row.status === 'late' && row.note)?.note || "yo'q"
-      const scoreTrend = scoreTrendFromRows(scores)
-      const skills = extractSkillInsights(scores)
-
-      const groupStudents = student?.group
-        ? await prisma.student.findMany({ where: { group: student.group }, select: { id: true, fullName: true } })
-        : []
-      const groupStudentIds = groupStudents.map((row) => row.id)
-
-      const [weeklyRows, mockRows] = groupStudentIds.length
-        ? await Promise.all([
-            prisma.score.findMany({ where: { studentId: { in: groupStudentIds }, scoreType: 'weekly' }, orderBy: { createdAt: 'desc' } }),
-            prisma.score.findMany({ where: { studentId: { in: groupStudentIds }, scoreType: 'mock' }, orderBy: { createdAt: 'desc' } }),
-          ])
-        : [[], []]
-
-      const getRank = (rows: typeof weeklyRows, studentId?: number | null) => {
-        if (!studentId || !rows.length || !groupStudents.length) return 0
-
-        const latestByStudent = new Map<number, number>()
-        for (const row of rows) {
-          if (!row.studentId || latestByStudent.has(row.studentId)) continue
-          latestByStudent.set(row.studentId, Number(row.overallPercent ?? row.value ?? 0))
-        }
-
-        const ranked = groupStudents
-          .map((groupStudent) => ({
-            id: groupStudent.id,
-            score: latestByStudent.get(groupStudent.id) ?? 0,
-          }))
-          .sort((a, b) => b.score - a.score)
-
-        let currentRank = 0
-        let previousScore: number | null = null
-        for (let i = 0; i < ranked.length; i += 1) {
-          const row = ranked[i]
-          if (previousScore === null || row.score < previousScore) {
-            currentRank = i + 1
-            previousScore = row.score
-          }
-          if (row.id === studentId) return currentRank
-        }
-
-        return 0
-      }
-
-      const weeklyRank = getRank(weeklyRows, student?.id)
-      const mockRank = getRank(mockRows, student?.id)
-      const snapshot: StudentInsightSnapshot = {
-        parentName: linkedParent?.unpacked?.fullName || linkedParent?.raw?.fullName || 'Ota-ona',
-        studentName: student?.fullName || 'Noma\'lum',
-        group: student?.group || 'Noma\'lum',
-        attendanceRate,
-        latestScore,
-        weeklyRank,
-        mockRank,
-        lastPaymentStatus,
-        lastAttendance,
-        lastLateNote,
-        lateCount14d,
-        absentCount14d,
-        scoreTrend,
-        skills,
-      }
-
-      const mode = chatAssistantModeByChat.get(chatId) || 'bot'
-      const aiText = mode === 'ai'
-        ? await buildParentAssistantReply({
-            question: text,
-            snapshot,
-          })
-        : buildBotModeReply({
-            question: text,
-            snapshot,
-          })
 
       const sent = await sendTelegramMessage({
         chatId,
-        text: `${mode === 'ai' ? '🤖 <b>KEVIN AI</b>' : '📘 <b>KEVIN BOT</b>'}\n\n${aiText}`,
+        text: `📘 <b>KEVIN BOT</b>\n\n${aiText}`,
         modeButtons: true,
-        activeMode: mode,
       })
       if (!sent.ok) {
         console.error('Telegram webhook: failed sending AI response', sent)
@@ -901,12 +1449,10 @@ export async function POST(request: Request) {
     if (!linkCode) {
       const alreadyLinked = await resolveParentByChatId(chatId)
       if (alreadyLinked) {
-        chatAssistantModeByChat.set(chatId, 'bot')
         const sent = await sendTelegramMessage({
           chatId,
-          text: `✅ Bot allaqachon ulangan.\n\nHurmatli <b>${alreadyLinked.unpacked?.fullName || 'ota-ona'}</b>, endi sizga davomat va ball bo'yicha doimiy bildirishnomalar keladi.\n\nHozirgi rejim: <b>KEVIN BOT</b>. Erkin AI savollar uchun <b>KEVIN AI</b> tugmasini bosing.`,
+          text: `✅ Bot allaqachon ulangan.\n\nHurmatli <b>${alreadyLinked.unpacked?.fullName || 'ota-ona'}</b>, endi sizga davomat va ball bo'yicha doimiy bildirishnomalar keladi.\n\nSiz bo‘limli savollarni <b>SAVOL UCHUN KEVIN BOT</b> tugmasi orqali bera olasiz.`,
           modeButtons: true,
-          activeMode: 'bot',
         })
         if (!sent.ok) {
           console.error('Telegram webhook: failed sending already-linked message', sent)
@@ -914,12 +1460,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, linked: true })
       }
 
-      const sent = await sendTelegramMessage({
+      const sent = await sendTelegramContactRequestMessage({
         chatId,
-        text: "👋 Kevin's Academy botiga xush kelibsiz!\n\nTelegram bog'lash uchun O'ZINGIZNING telefon raqamingiz bilan yozing:\n<code>/start +9989XXXXXXXX</code>\n\nMasalan: <code>/start +998954403969</code>",
+        text: "👋 Kevin's Academy botiga xush kelibsiz!\n\nTez ulanish uchun pastdagi <b>Raqamni yuborish</b> tugmasini bosing.",
+        buttonText: '📱 Raqamni yuborish',
       })
       if (!sent.ok) {
-        console.error('Telegram webhook: failed sending welcome message', sent)
+        console.error('Telegram webhook: failed sending contact-request message', sent)
       }
       return NextResponse.json({ ok: true })
     }
@@ -972,6 +1519,7 @@ export async function POST(request: Request) {
       username: matchedParent.unpacked?.username || existingMeta?.username,
       password: matchedParent.unpacked?.password || existingMeta?.password,
       studentId: matchedParent.unpacked?.studentId || existingMeta?.studentId,
+      studentIds: matchedParent.unpacked?.studentIds || existingMeta?.studentIds,
       phone: matchedParent.unpacked?.phone || existingMeta?.phone || matchedParent.raw.phone,
       telegramChatId: chatId,
     }
@@ -983,17 +1531,27 @@ export async function POST(request: Request) {
       }
     })
 
-    chatAssistantModeByChat.set(chatId, 'bot')
+    await updateParentBotStatusByChatId({
+      adminId: matchedParent.raw?.adminId,
+      studentId: Number(nextMetadata.studentId || 0) || undefined,
+      chatId,
+      status: 'CONNECTED',
+    })
 
     const sent = await sendTelegramMessage({
       chatId,
-      text: `✅ Telegram muvaffaqiyatli ulandi!\n\nHurmatli <b>${matchedParent.unpacked?.fullName || 'ota-ona'}</b>, endi sizga real-vaqtda bildirishnomalar yuboriladi.\n\nHozirgi rejim: <b>KEVIN BOT</b>. Erkin AI savollar uchun <b>KEVIN AI</b> tugmasini bosing.`,
+      text: `✅ Telegram muvaffaqiyatli ulandi!\n\nHurmatli <b>${matchedParent.unpacked?.fullName || 'ota-ona'}</b>, endi sizga real-vaqtda bildirishnomalar yuboriladi.\n\nSavol berish uchun <b>SAVOL UCHUN KEVIN BOT</b> tugmasidan foydalaning.`,
       modeButtons: true,
-      activeMode: 'bot',
     })
     if (!sent.ok) {
       console.error('Telegram webhook: failed sending success message', sent)
     }
+
+    await sendRecentScoreHistoryToParent({
+      chatId,
+      parentRow: matchedParent.raw,
+      unpacked: matchedParent.unpacked,
+    })
 
     return NextResponse.json({ ok: true })
   } catch (error) {

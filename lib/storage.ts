@@ -19,11 +19,43 @@ export interface Group {
   adminId?: string | number;
   name: string;
   level?: string;
+  track?: 'foundation' | 'cefr' | 'ielts' | string;
+  telegramChatId?: string;
   description?: string;
   teacher?: string;
   schedule?: string;
   maxStudents?: number;
   createdAt?: string;
+}
+
+export interface IeltsProgressMapPayload {
+  studentId: string | number;
+  groupName?: string;
+  listeningTotalTests?: number;
+  listeningSolvedTests?: number;
+  listeningReadingCorrect?: number;
+  scriptWritingCount?: number;
+  podcastVideoAnalysisCount?: number;
+  writingTask1Uploads?: number;
+  writingTask2Uploads?: number;
+  speakingGeneralCount?: number;
+  speakingAcademicCount?: number;
+  fluencyScore?: number;
+  lexicalScore?: number;
+  grammarScore?: number;
+  pronunciationScore?: number;
+  vocabularyTotalWords?: number;
+  vocabularyKnownWords?: number;
+  vocabularyUnknownWords?: number;
+  vocabularyUploadNote?: string;
+  vocabularyUploadFiles?: string[];
+  grammarTopicTests?: number;
+  grammarFixScore?: number;
+  grammarErrorWorkCount?: number;
+  articleReadCount?: number;
+  articleTranslationCount?: number;
+  readingArtScore?: number;
+  attendanceEffectPercent?: number;
 }
 
 export interface Payment {
@@ -83,11 +115,16 @@ export interface Parent {
   email?: string;
   phone?: string;
   studentId?: string;
+  studentIds?: string[];
   adminId?: string;
   telegramChatId?: string;
   telegramConnected?: boolean;
   telegramInviteLink?: string;
   normalizedPhone?: string;
+  botStatus?: 'CONNECTED' | 'DISCONNECTED' | string;
+  botDisconnectedAt?: string;
+  botLastCheckedAt?: string;
+  botLastError?: string;
   createdAt?: string;
 }
 
@@ -96,7 +133,11 @@ export interface Admin {
   username: string;
   password: string;
   fullName: string;
-  email: string;
+  email?: string;
+  contactPhone?: string;
+  telegramUsername?: string;
+  notifyTelegram?: boolean;
+  notifySms?: boolean;
   isActive?: boolean;
   createdAt: string;
 }
@@ -121,7 +162,18 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
   const res = await fetch(path, { credentials: 'include', ...opts, headers });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `${res.status}`);
+    let message = text || `${res.status}`;
+    try {
+      const parsed = JSON.parse(text || '{}');
+      if (typeof parsed?.error === 'string' && parsed.error.trim()) {
+        message = parsed.error;
+      } else if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+        message = parsed.message;
+      }
+    } catch {
+      // keep raw text
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -134,7 +186,18 @@ async function apiFetchAsAdmin(path: string, adminId?: string, opts: RequestInit
   const res = await fetch(path, { credentials: 'include', ...opts, headers });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `${res.status}`);
+    let message = text || `${res.status}`;
+    try {
+      const parsed = JSON.parse(text || '{}');
+      if (typeof parsed?.error === 'string' && parsed.error.trim()) {
+        message = parsed.error;
+      } else if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+        message = parsed.message;
+      }
+    } catch {
+      // keep raw text
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -219,6 +282,14 @@ export const addParent = (data: any) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+export const updateParent = (id: string | number, data: any) =>
+  apiFetch('/api/parents', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: Number(id), ...data }),
+  });
+export const deleteParent = (id: string | number) =>
+  apiFetch(`/api/parents?id=${encodeURIComponent(String(id))}`, { method: 'DELETE' });
 
 // ---- Payments -------------------------------------------------------------
 export const getPayments = async () => {
@@ -263,6 +334,16 @@ export const getScores = async () => {
 };
 export const addScore = (data: any) =>
   apiFetch('/api/scores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+export const getIeltsProgressMap = (studentId: string | number) =>
+  apiFetch(`/api/ielts/progress?studentId=${encodeURIComponent(String(studentId))}`);
+
+export const saveIeltsProgressMap = (data: IeltsProgressMapPayload) =>
+  apiFetch('/api/ielts/progress', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),

@@ -104,7 +104,7 @@ export default function StudentVocabularyPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const signalPollingRef = useRef<any>(null)
-  const signalCursorRef = useRef(0)
+  const signalCursorIdRef = useRef(0)
   const sentOfferRef = useRef(false)
   const recordingChunksRef = useRef<BlobPart[]>([])
   const recordingIntervalRef = useRef<any>(null)
@@ -636,7 +636,7 @@ export default function StudentVocabularyPage() {
     if (liveVideoRef.current) {
       liveVideoRef.current.srcObject = null
     }
-    signalCursorRef.current = 0
+    signalCursorIdRef.current = 0
     sentOfferRef.current = false
     setRemoteStreamReady(false)
     setDuelConnectionStatus(activeDuel?.id ? 'waiting' : 'idle')
@@ -663,7 +663,7 @@ export default function StudentVocabularyPage() {
       if (liveVideoRef.current) {
         liveVideoRef.current.srcObject = stream
       }
-      signalCursorRef.current = 0
+      signalCursorIdRef.current = 0
       sentOfferRef.current = false
       setDuelConnectionStatus(activeDuel?.id ? 'connecting' : 'idle')
       setCameraActive(true)
@@ -749,20 +749,22 @@ export default function StudentVocabularyPage() {
 
     const processSignals = async () => {
       try {
-        const response = await fetch(`/api/vocabulary/duels/signal?duelId=${duelId}&studentId=${encodeURIComponent(String(student.id))}&since=${signalCursorRef.current}`)
+        const response = await fetch(`/api/vocabulary/duels/signal?duelId=${duelId}&studentId=${encodeURIComponent(String(student.id))}&sinceId=${signalCursorIdRef.current}`)
         const payload = await response.json()
         if (!response.ok || stopped) return
         const signals = Array.isArray(payload?.signals) ? payload.signals : []
         for (const signal of signals) {
           const type = String(signal?.type || '').toLowerCase()
           const signalPayload = signal?.payload
-          const at = Number(signal?.at || 0)
-          if (at > signalCursorRef.current) {
-            signalCursorRef.current = at
+          const signalId = Number(signal?.id || 0)
+          if (signalId > signalCursorIdRef.current) {
+            signalCursorIdRef.current = signalId
           }
 
           if (type === 'offer' && !isCaller && signalPayload) {
-            await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+            if (connection.signalingState === 'stable' && !connection.currentRemoteDescription) {
+              await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+            }
             const answer = await connection.createAnswer()
             await connection.setLocalDescription(answer)
             await sendDuelSignal(duelId, 'answer', answer)
@@ -782,6 +784,10 @@ export default function StudentVocabularyPage() {
             setRemoteStreamReady(false)
             setDuelConnectionStatus('waiting')
           }
+        }
+        const latestSignalId = Number(payload?.latestSignalId || 0)
+        if (latestSignalId > signalCursorIdRef.current) {
+          signalCursorIdRef.current = latestSignalId
         }
       } catch {
         if (!stopped) {

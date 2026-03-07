@@ -184,6 +184,18 @@ model VocabularyDuel {
   @@index([opponentId, status, createdAt])
 }
 
+model VocabularyDuelSignal {
+  id            Int      @id @default(autoincrement())
+  duelId        Int
+  fromStudentId Int
+  type          String
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@index([duelId, createdAt])
+  @@index([duelId, fromStudentId, createdAt])
+}
+
 model VocabularySessionControl {
   id             Int      @id @default(autoincrement())
   adminId        Int      @unique

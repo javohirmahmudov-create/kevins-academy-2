@@ -402,6 +402,16 @@ export default function StudentVocabularyPage() {
   }, [])
 
   useEffect(() => {
+    if (!cameraActive) return
+    const videoElement = liveVideoRef.current
+    const stream = mediaStreamRef.current
+    if (!videoElement || !stream) return
+
+    videoElement.srcObject = stream
+    void videoElement.play().catch(() => undefined)
+  }, [cameraActive])
+
+  useEffect(() => {
     if (!recordingActive) {
       lastBeepSecondRef.current = -1
       return

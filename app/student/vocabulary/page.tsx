@@ -2,7 +2,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Bell, Brain, Mic, RefreshCw, Search, Upload, Users, Video, CheckCircle2 } from 'lucide-react'
 import { useApp } from '@/lib/app-context'
@@ -39,7 +39,6 @@ type DuelItem = {
 
 export default function StudentVocabularyPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { currentStudent } = useApp()
 
   const [student, setStudent] = useState<any>(null)
@@ -233,11 +232,12 @@ export default function StudentVocabularyPage() {
   }, [student?.id, loadDuels, loadPairing, loadSession])
 
   useEffect(() => {
-    const requestedTab = String(searchParams.get('tab') || '').trim().toLowerCase()
+    if (typeof window === 'undefined') return
+    const requestedTab = String(new URLSearchParams(window.location.search).get('tab') || '').trim().toLowerCase()
     if (requestedTab === 'peer' || requestedTab === 'proctor' || requestedTab === 'flashcards') {
       setTab(requestedTab)
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     if (!student?.id) return

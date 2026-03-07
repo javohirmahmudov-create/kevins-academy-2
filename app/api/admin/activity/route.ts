@@ -75,9 +75,16 @@ function normalizeActivityGroup(raw?: string | null): string {
     .filter(Boolean)
 
   if (chunks.length >= 2) {
-    return chunks[chunks.length - 1]
+    const normalized = chunks[chunks.length - 1]
+    if (/^pre\s*-?\s*ielts$/i.test(normalized)) return 'PRE IELTS'
+    if (/^cefr$/i.test(normalized)) return 'CEFR'
+    if (/^elementary\s*-?\s*litsey$/i.test(normalized)) return 'ELEMENTARY-LITSEY'
+    return normalized
   }
 
+  if (/^pre\s*-?\s*ielts$/i.test(value)) return 'PRE IELTS'
+  if (/^cefr$/i.test(value)) return 'CEFR'
+  if (/^elementary\s*-?\s*litsey$/i.test(value)) return 'ELEMENTARY-LITSEY'
   return value
 }
 

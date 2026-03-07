@@ -705,7 +705,9 @@ export default function StudentVocabularyPage() {
 
     let stopped = false
     const roomKey = `pair:${Math.min(selfId, partnerId)}-${Math.max(selfId, partnerId)}`
-    const isCaller = selfId < partnerId
+    const polite = selfId > partnerId
+    let makingOffer = false
+    let ignoreOffer = false
     setDuelConnectionStatus('connecting')
 
     const connection = new RTCPeerConnection({
@@ -756,11 +758,19 @@ export default function StudentVocabularyPage() {
     }
 
     const ensureOffer = async () => {
-      if (!isCaller || sentOfferRef.current) return
-      const offer = await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-      await connection.setLocalDescription(offer)
-      sentOfferRef.current = true
-      await sendLiveSignal(roomKey, 'offer', offer)
+      if (sentOfferRef.current) return
+      try {
+        makingOffer = true
+        const offer = await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+        if (connection.signalingState !== 'stable') return
+        await connection.setLocalDescription(offer)
+        sentOfferRef.current = true
+        await sendLiveSignal(roomKey, 'offer', offer)
+      } catch {
+        // negotiation retry happens on next poll or reconnect
+      } finally {
+        makingOffer = false
+      }
     }
 
     const processSignals = async () => {
@@ -777,16 +787,28 @@ export default function StudentVocabularyPage() {
             signalCursorIdRef.current = signalId
           }
 
-          if (type === 'offer' && !isCaller && signalPayload) {
-            if (connection.signalingState === 'stable' && !connection.currentRemoteDescription) {
-              await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
+          if (type === 'offer' && signalPayload) {
+            const offerCollision = makingOffer || connection.signalingState !== 'stable'
+            ignoreOffer = !polite && offerCollision
+            if (ignoreOffer) {
+              continue
             }
+
+            if (offerCollision) {
+              try {
+                await connection.setLocalDescription({ type: 'rollback' })
+              } catch {
+                // ignore rollback failures
+              }
+            }
+
+            await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
             const answer = await connection.createAnswer()
             await connection.setLocalDescription(answer)
             await sendLiveSignal(roomKey, 'answer', answer)
             setDuelConnectionStatus('connecting')
-          } else if (type === 'answer' && isCaller && signalPayload) {
-            if (!connection.currentRemoteDescription) {
+          } else if (type === 'answer' && signalPayload) {
+            if (connection.signalingState === 'have-local-offer') {
               await connection.setRemoteDescription(new RTCSessionDescription(signalPayload))
             }
             setDuelConnectionStatus('connecting')

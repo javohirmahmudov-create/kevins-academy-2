@@ -568,14 +568,14 @@ export default function StudentVocabularyPage() {
     setPairPartner(random || null)
   }
 
-  const sendDuelSignal = useCallback(async (duelId: number, type: 'offer' | 'answer' | 'candidate' | 'hangup', payload: any) => {
-    if (!student?.id || !duelId) return
+  const sendLiveSignal = useCallback(async (roomKey: string, type: 'offer' | 'answer' | 'candidate' | 'hangup', payload: any) => {
+    if (!student?.id || !roomKey) return
     try {
-      await fetch('/api/vocabulary/duels/signal', {
+      await fetch('/api/vocabulary/peer/live-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          duelId,
+          roomKey,
           studentId: student.id,
           type,
           payload,
@@ -611,8 +611,14 @@ export default function StudentVocabularyPage() {
   }
 
   const stopCamera = useCallback(() => {
-    if (activeDuel?.id && student?.id) {
-      void sendDuelSignal(Number(activeDuel.id), 'hangup', { reason: 'camera_off' })
+    const selfId = Number(student?.id || 0)
+    const partnerId = Number(pairPartner?.id || 0)
+    const roomKey = selfId && partnerId
+      ? `pair:${Math.min(selfId, partnerId)}-${Math.max(selfId, partnerId)}`
+      : ''
+
+    if (roomKey && student?.id) {
+      void sendLiveSignal(roomKey, 'hangup', { reason: 'camera_off' })
     }
     if (signalPollingRef.current) {
       clearInterval(signalPollingRef.current)
@@ -639,9 +645,9 @@ export default function StudentVocabularyPage() {
     signalCursorIdRef.current = 0
     sentOfferRef.current = false
     setRemoteStreamReady(false)
-    setDuelConnectionStatus(activeDuel?.id ? 'waiting' : 'idle')
+    setDuelConnectionStatus(roomKey ? 'waiting' : 'idle')
     setCameraActive(false)
-  }, [activeDuel?.id, sendDuelSignal, student?.id])
+  }, [pairPartner?.id, sendLiveSignal, student?.id])
 
   const turnOnCamera = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -665,31 +671,41 @@ export default function StudentVocabularyPage() {
       }
       signalCursorIdRef.current = 0
       sentOfferRef.current = false
-      setDuelConnectionStatus(activeDuel?.id ? 'connecting' : 'idle')
+      const selfId = Number(student?.id || 0)
+      const partnerId = Number(pairPartner?.id || 0)
+      const hasRoom = Boolean(selfId && partnerId && selfId !== partnerId)
+      setDuelConnectionStatus(hasRoom ? 'connecting' : 'idle')
       setCameraActive(true)
     } catch {
       setCameraError('Kameraga ruxsat berilmadi yoki kamera topilmadi')
       setDuelConnectionStatus('error')
       setCameraActive(false)
     }
-  }, [activeDuel?.id])
+  }, [pairPartner?.id, student?.id])
 
   useEffect(() => {
-    if (!activeDuel?.id || tab !== 'peer' || cameraActive) return
+    const selfId = Number(student?.id || 0)
+    const partnerId = Number(pairPartner?.id || 0)
+    if (!selfId || !partnerId || selfId === partnerId) return
+    if (tab !== 'peer' || cameraActive) return
     void turnOnCamera()
-  }, [activeDuel?.id, cameraActive, tab, turnOnCamera])
+  }, [cameraActive, pairPartner?.id, student?.id, tab, turnOnCamera])
 
   useEffect(() => {
-    if (!activeDuel?.id || !cameraActive || !student?.id || !mediaStreamRef.current) {
-      if (!activeDuel?.id) {
+    const selfId = Number(student?.id || 0)
+    const partnerId = Number(pairPartner?.id || 0)
+    const hasRoom = Boolean(selfId && partnerId && selfId !== partnerId)
+
+    if (!hasRoom || !cameraActive || !student?.id || !mediaStreamRef.current) {
+      if (!hasRoom) {
         setDuelConnectionStatus('idle')
       }
       return
     }
 
     let stopped = false
-    const duelId = Number(activeDuel.id)
-    const isCaller = Number(activeDuel.challengerId) === Number(student.id)
+    const roomKey = `pair:${Math.min(selfId, partnerId)}-${Math.max(selfId, partnerId)}`
+    const isCaller = selfId < partnerId
     setDuelConnectionStatus('connecting')
 
     const connection = new RTCPeerConnection({
@@ -722,7 +738,7 @@ export default function StudentVocabularyPage() {
 
     connection.onicecandidate = (event) => {
       if (!event.candidate) return
-      void sendDuelSignal(duelId, 'candidate', event.candidate.toJSON())
+      void sendLiveSignal(roomKey, 'candidate', event.candidate.toJSON())
     }
 
     connection.onconnectionstatechange = () => {
@@ -744,12 +760,12 @@ export default function StudentVocabularyPage() {
       const offer = await connection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
       await connection.setLocalDescription(offer)
       sentOfferRef.current = true
-      await sendDuelSignal(duelId, 'offer', offer)
+      await sendLiveSignal(roomKey, 'offer', offer)
     }
 
     const processSignals = async () => {
       try {
-        const response = await fetch(`/api/vocabulary/duels/signal?duelId=${duelId}&studentId=${encodeURIComponent(String(student.id))}&sinceId=${signalCursorIdRef.current}`)
+        const response = await fetch(`/api/vocabulary/peer/live-signal?roomKey=${encodeURIComponent(roomKey)}&studentId=${encodeURIComponent(String(student.id))}&sinceId=${signalCursorIdRef.current}`)
         const payload = await response.json()
         if (!response.ok || stopped) return
         const signals = Array.isArray(payload?.signals) ? payload.signals : []
@@ -767,7 +783,7 @@ export default function StudentVocabularyPage() {
             }
             const answer = await connection.createAnswer()
             await connection.setLocalDescription(answer)
-            await sendDuelSignal(duelId, 'answer', answer)
+            await sendLiveSignal(roomKey, 'answer', answer)
             setDuelConnectionStatus('connecting')
           } else if (type === 'answer' && isCaller && signalPayload) {
             if (!connection.currentRemoteDescription) {
@@ -827,7 +843,7 @@ export default function StudentVocabularyPage() {
       setRemoteStreamReady(false)
       setDuelConnectionStatus('waiting')
     }
-  }, [activeDuel?.challengerId, activeDuel?.id, cameraActive, sendDuelSignal, student?.id])
+  }, [cameraActive, pairPartner?.id, sendLiveSignal, student?.id])
 
   const startPeerRecording = () => {
     if (!mediaStreamRef.current || recordingActive) return
@@ -918,14 +934,21 @@ export default function StudentVocabularyPage() {
 
   const recordingWarning = recordingActive && recordingRemainingSeconds <= 10
 
+  const liveRoomKey = useMemo(() => {
+    const selfId = Number(student?.id || 0)
+    const partnerId = Number(pairPartner?.id || 0)
+    if (!selfId || !partnerId || selfId === partnerId) return ''
+    return `pair:${Math.min(selfId, partnerId)}-${Math.max(selfId, partnerId)}`
+  }, [pairPartner?.id, student?.id])
+
   const duelStatusLabel = useMemo(() => {
-    if (!activeDuel?.id) return ''
+    if (!liveRoomKey) return ''
     if (duelConnectionStatus === 'connected' && remoteStreamReady) return 'Ulanish: Jonli'
     if (duelConnectionStatus === 'connecting') return 'Ulanish: bog‘lanmoqda...'
     if (duelConnectionStatus === 'disconnected') return 'Ulanish uzildi, qayta ulanmoqda...'
     if (duelConnectionStatus === 'error') return 'Ulanish xatoligi'
     return 'Sherigingiz kutilmoqda...'
-  }, [activeDuel?.id, duelConnectionStatus, remoteStreamReady])
+  }, [duelConnectionStatus, liveRoomKey, remoteStreamReady])
 
   const uploadRecording = async () => {
     if (!recordingFile || !student?.group) return
@@ -1256,7 +1279,7 @@ export default function StudentVocabularyPage() {
                     <p className="text-xs text-red-600 dark:text-red-300">{cameraError}</p>
                   ) : null}
 
-                  {activeDuel ? (
+                  {liveRoomKey ? (
                     <p className={`text-xs ${remoteStreamReady ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'}`}>
                       {duelStatusLabel}
                     </p>
@@ -1264,7 +1287,7 @@ export default function StudentVocabularyPage() {
 
                   {cameraActive ? (
                     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black">
-                      {activeDuel ? (
+                      {liveRoomKey ? (
                         <>
                           <video ref={remoteVideoRef} autoPlay playsInline className="w-full max-h-72 object-cover" />
                           <video ref={liveVideoRef} autoPlay playsInline muted className="absolute bottom-3 right-3 h-24 w-32 sm:h-28 sm:w-40 object-cover rounded-lg border border-white/70 shadow-lg bg-black" />

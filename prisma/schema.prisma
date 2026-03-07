@@ -196,6 +196,18 @@ model VocabularyDuelSignal {
   @@index([duelId, fromStudentId, createdAt])
 }
 
+model VocabularyLiveSignal {
+  id            Int      @id @default(autoincrement())
+  roomKey       String
+  fromStudentId Int
+  type          String
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@index([roomKey, createdAt])
+  @@index([roomKey, fromStudentId, createdAt])
+}
+
 model VocabularySessionControl {
   id             Int      @id @default(autoincrement())
   adminId        Int      @unique

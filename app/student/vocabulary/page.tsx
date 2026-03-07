@@ -37,6 +37,8 @@ type DuelItem = {
   incoming?: boolean
 }
 
+const MAX_RECORDING_SECONDS = 120
+
 export default function StudentVocabularyPage() {
   const router = useRouter()
   const { currentStudent } = useApp()
@@ -80,6 +82,12 @@ export default function StudentVocabularyPage() {
 
   const [recordingFile, setRecordingFile] = useState<File | null>(null)
   const [uploadingRecording, setUploadingRecording] = useState(false)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [recordingActive, setRecordingActive] = useState(false)
+  const [recordingRemainingSeconds, setRecordingRemainingSeconds] = useState(MAX_RECORDING_SECONDS)
+  const [recordedPreviewUrl, setRecordedPreviewUrl] = useState('')
+  const [cameraError, setCameraError] = useState('')
+  const [recordingWarningSoundEnabled, setRecordingWarningSoundEnabled] = useState(true)
 
   const questionStartedAtRef = useRef(0)
   const questionTimeoutRef = useRef<any>(null)
@@ -87,6 +95,13 @@ export default function StudentVocabularyPage() {
   const recognitionRef = useRef<any>(null)
   const activeDuelSeenRef = useRef<number>(0)
   const [nowTick, setNowTick] = useState(Date.now())
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordingChunksRef = useRef<BlobPart[]>([])
+  const recordingIntervalRef = useRef<any>(null)
+  const recordedPreviewUrlRef = useRef('')
+  const lastBeepSecondRef = useRef(-1)
 
   useEffect(() => {
     if (currentStudent) {
@@ -368,8 +383,63 @@ export default function StudentVocabularyPage() {
       if (recognitionRef.current && typeof recognitionRef.current.stop === 'function') {
         recognitionRef.current.stop()
       }
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current)
+        recordingIntervalRef.current = null
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+        mediaStreamRef.current = null
+      }
+      if (recordedPreviewUrlRef.current) {
+        URL.revokeObjectURL(recordedPreviewUrlRef.current)
+        recordedPreviewUrlRef.current = ''
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (!recordingActive) {
+      lastBeepSecondRef.current = -1
+      return
+    }
+
+    if (!recordingWarningSoundEnabled) {
+      lastBeepSecondRef.current = -1
+      return
+    }
+
+    const seconds = recordingRemainingSeconds
+    const shouldBeep = seconds === 10 || seconds === 5 || seconds === 3 || seconds === 2 || seconds === 1
+    if (!shouldBeep) return
+    if (lastBeepSecondRef.current === seconds) return
+    lastBeepSecondRef.current = seconds
+
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      const audioContext = new AudioContextClass()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      oscillator.type = 'sine'
+      oscillator.frequency.value = seconds <= 3 ? 980 : 740
+      gainNode.gain.value = 0.06
+
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      oscillator.start()
+      oscillator.stop(audioContext.currentTime + 0.12)
+      oscillator.onended = () => {
+        audioContext.close().catch(() => undefined)
+      }
+    } catch {
+      // ignore beep errors
+    }
+  }, [recordingActive, recordingRemainingSeconds, recordingWarningSoundEnabled])
 
   const secondsLeft = useMemo(() => {
     if (!quizRunning || !currentQuizItem || !questionStartedAtRef.current) return timeLimitSeconds
@@ -450,6 +520,157 @@ export default function StudentVocabularyPage() {
     const random = pairCandidates[Math.floor(Math.random() * pairCandidates.length)]
     setPairPartner(random || null)
   }
+
+  const getSupportedRecorderMimeType = () => {
+    if (typeof MediaRecorder === 'undefined') return ''
+    const preferredTypes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+      'video/mp4'
+    ]
+    return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) || ''
+  }
+
+  const clearRecordingTimer = () => {
+    if (!recordingIntervalRef.current) return
+    clearInterval(recordingIntervalRef.current)
+    recordingIntervalRef.current = null
+  }
+
+  const stopPeerRecording = () => {
+    clearRecordingTimer()
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+    recorder.stop()
+  }
+
+  const stopCamera = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop())
+      mediaStreamRef.current = null
+    }
+    if (liveVideoRef.current) {
+      liveVideoRef.current.srcObject = null
+    }
+    setCameraActive(false)
+  }
+
+  const turnOnCamera = async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Brauzeringiz kamerani qo‘llab-quvvatlamaydi')
+      return
+    }
+
+    try {
+      setCameraError('')
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 360 },
+        },
+        audio: true,
+      })
+      mediaStreamRef.current = stream
+      if (liveVideoRef.current) {
+        liveVideoRef.current.srcObject = stream
+      }
+      setCameraActive(true)
+    } catch {
+      setCameraError('Kameraga ruxsat berilmadi yoki kamera topilmadi')
+      setCameraActive(false)
+    }
+  }
+
+  const startPeerRecording = () => {
+    if (!mediaStreamRef.current || recordingActive) return
+    if (typeof MediaRecorder === 'undefined') {
+      setCameraError('MediaRecorder bu brauzerda mavjud emas')
+      return
+    }
+
+    const mimeType = getSupportedRecorderMimeType()
+    try {
+      setCameraError('')
+      recordingChunksRef.current = []
+      const recorder = mimeType
+        ? new MediaRecorder(mediaStreamRef.current, {
+            mimeType,
+            videoBitsPerSecond: 800000,
+            audioBitsPerSecond: 64000,
+          })
+        : new MediaRecorder(mediaStreamRef.current)
+
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          recordingChunksRef.current.push(event.data)
+        }
+      }
+      recorder.onstop = () => {
+        clearRecordingTimer()
+        const chunks = recordingChunksRef.current
+        if (!chunks.length) {
+          setRecordingActive(false)
+          return
+        }
+
+        const resolvedType = chunks[0] instanceof Blob ? chunks[0].type : ''
+        const blob = new Blob(chunks, { type: resolvedType || mimeType || 'video/webm' })
+        const extension = blob.type.includes('mp4') ? 'mp4' : 'webm'
+        const file = new File([blob], `peer-recording-${student?.id || 'student'}-${Date.now()}.${extension}`, { type: blob.type })
+        setRecordingFile(file)
+        setPeerRecordingUrl('')
+
+        if (recordedPreviewUrlRef.current) {
+          URL.revokeObjectURL(recordedPreviewUrlRef.current)
+          recordedPreviewUrlRef.current = ''
+        }
+        const nextPreviewUrl = URL.createObjectURL(blob)
+        recordedPreviewUrlRef.current = nextPreviewUrl
+        setRecordedPreviewUrl(nextPreviewUrl)
+        setRecordingActive(false)
+      }
+      recorder.start(1000)
+      lastBeepSecondRef.current = -1
+      setRecordingRemainingSeconds(MAX_RECORDING_SECONDS)
+      setRecordingActive(true)
+      clearRecordingTimer()
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            stopPeerRecording()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    } catch {
+      setCameraError('Yozishni boshlashda xatolik yuz berdi')
+      setRecordingActive(false)
+    }
+  }
+
+  const resetRecordedVideo = () => {
+    setRecordingFile(null)
+    setPeerRecordingUrl('')
+    if (recordedPreviewUrlRef.current) {
+      URL.revokeObjectURL(recordedPreviewUrlRef.current)
+      recordedPreviewUrlRef.current = ''
+    }
+    setRecordedPreviewUrl('')
+    setRecordingRemainingSeconds(MAX_RECORDING_SECONDS)
+  }
+
+  const recordingCountdownLabel = useMemo(() => {
+    const safeSeconds = Math.max(0, recordingRemainingSeconds)
+    const minutes = Math.floor(safeSeconds / 60)
+    const seconds = safeSeconds % 60
+    return `${minutes}:${String(seconds).padStart(2, '0')}`
+  }, [recordingRemainingSeconds])
+
+  const recordingWarning = recordingActive && recordingRemainingSeconds <= 10
 
   const uploadRecording = async () => {
     if (!recordingFile || !student?.group) return
@@ -750,17 +971,80 @@ export default function StudentVocabularyPage() {
                 <p className="text-xl font-bold text-gray-900 dark:text-white">{pairPartner.fullName}</p>
 
                 <div className="space-y-2">
-                  <label className="text-sm text-gray-600 dark:text-gray-300">Video recording (upload)</label>
-                  <div className="flex gap-2 flex-wrap">
-                    <input type="file" accept="video/*" onChange={(event) => setRecordingFile(event.target.files?.[0] || null)} className="text-sm" />
+                  <label className="text-sm text-gray-600 dark:text-gray-300">Live video recording</label>
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={uploadRecording}
-                      disabled={!recordingFile || uploadingRecording}
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                      onClick={cameraActive ? stopCamera : turnOnCamera}
+                      disabled={recordingActive}
+                      className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
                     >
-                      <Upload className="w-4 h-4" /> {uploadingRecording ? 'Yuklanmoqda...' : 'Yuklash'}
+                      {cameraActive ? 'Kamerani o‘chirish' : 'Kamerani yoqish'}
+                    </button>
+                    {recordedPreviewUrl ? (
+                      <button
+                        onClick={resetRecordedVideo}
+                        disabled={recordingActive}
+                        className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        Qayta yozish
+                      </button>
+                    ) : null}
+                    <button
+                      onClick={() => setRecordingWarningSoundEnabled((prev) => !prev)}
+                      className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm"
+                    >
+                      {recordingWarningSoundEnabled ? '🔊 Ovoz: ON' : '🔇 Ovoz: OFF'}
                     </button>
                   </div>
+
+                  {cameraError ? (
+                    <p className="text-xs text-red-600 dark:text-red-300">{cameraError}</p>
+                  ) : null}
+
+                  {cameraActive ? (
+                    <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-black">
+                      <video ref={liveVideoRef} autoPlay playsInline muted className="w-full max-h-72 object-cover" />
+                      <div className={`absolute top-2 left-2 rounded-md px-2 py-1 text-xs text-white ${recordingWarning ? 'bg-red-600 animate-pulse' : 'bg-black/60'}`}>
+                        {recordingActive ? `⏱ ${recordingCountdownLabel}` : 'Tayyor 2:00'}
+                      </div>
+                      {recordingWarning ? (
+                        <div className="absolute top-10 left-2 rounded-md bg-red-600/90 animate-pulse px-2 py-1 text-[11px] font-semibold text-white">
+                          ⚠️ {recordingRemainingSeconds}s qoldi
+                        </div>
+                      ) : null}
+                      <div className="absolute top-2 right-2 flex items-center gap-2">
+                        <button
+                          onClick={startPeerRecording}
+                          disabled={recordingActive}
+                          className="rounded-md bg-red-600 text-white px-2.5 py-1 text-xs disabled:opacity-50"
+                        >
+                          🔴 Record
+                        </button>
+                        <button
+                          onClick={stopPeerRecording}
+                          disabled={!recordingActive}
+                          className="rounded-md bg-gray-800/80 text-white px-2.5 py-1 text-xs disabled:opacity-50"
+                        >
+                          ⏹ Stop
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {recordedPreviewUrl ? (
+                    <div className="space-y-2 rounded-xl border border-indigo-200 dark:border-indigo-800 p-3">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">Preview</p>
+                      <video src={recordedPreviewUrl} controls playsInline className="w-full rounded-lg bg-black max-h-72" />
+                      <button
+                        onClick={uploadRecording}
+                        disabled={!recordingFile || uploadingRecording}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        <Upload className="w-4 h-4" /> {uploadingRecording ? 'Yuklanmoqda...' : 'Upload'}
+                      </button>
+                    </div>
+                  ) : null}
+
                   {peerRecordingUrl ? (
                     <a href={peerRecordingUrl} target="_blank" rel="noreferrer" className="text-sm text-indigo-600 inline-flex items-center gap-1 hover:underline">
                       <Video className="w-4 h-4" /> Recording link
